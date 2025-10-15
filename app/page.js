@@ -9,7 +9,6 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [progress, setProgress] = useState({ current: 0, total: 0, stage: "" });
-  const [downloadUrl, setDownloadUrl] = useState("");
   const [flatten, setFlatten] = useState(false);
 
   const handleFileChange = (e) => {
@@ -18,10 +17,6 @@ export default function HomePage() {
     );
     setFiles(selected);
     setError(selected.length ? "" : "Please select one or more .zip files.");
-    if (downloadUrl) {
-      URL.revokeObjectURL(downloadUrl);
-      setDownloadUrl("");
-    }
   };
 
   const reset = () => {
@@ -30,11 +25,15 @@ export default function HomePage() {
     setError("");
     setStatus("");
     setProgress({ current: 0, total: 0, stage: "" });
-    if (downloadUrl) {
-      URL.revokeObjectURL(downloadUrl);
-    }
-    setDownloadUrl("");
   };
+
+  async function ensureDir(root, parts) {
+    let dir = root;
+    for (const p of parts) {
+      dir = await dir.getDirectoryHandle(p, { create: true });
+    }
+    return dir;
+  }
 
   async function processZips() {
     if (!files.length) {
@@ -46,20 +45,20 @@ export default function HomePage() {
       setProcessing(true);
       setError("");
       setStatus("Reading ZIPs...");
-      const combined = new JSZip();
-      let totalFilesCount = 0;
 
       // Pre-count total files for coarse progress
+      let totalFilesCount = 0;
       for (const f of files) {
         const ab = await f.arrayBuffer();
         const z = await JSZip.loadAsync(ab);
-        totalFilesCount += Object.values(z.files).filter((entry) => !entry.dir)
-          .length;
+        totalFilesCount += Object.values(z.files).filter((entry) => !entry.dir).length;
       }
       setProgress({ current: 0, total: totalFilesCount, stage: "Extracting" });
 
-      // Merge all zips
+      // Extract and merge all zips into memory map
+      const merged = new Map(); // path -> Uint8Array
       let processedCount = 0;
+
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         setStatus(`Unzipping: ${file.name}`);
@@ -72,10 +71,8 @@ export default function HomePage() {
           const name = flatten ? entry.name.split("/").pop() : entry.name;
           const data = await entry.async("uint8array");
 
-          if (combined.file(name)) {
-            combined.remove(name);
-          }
-          combined.file(name, data);
+          // Overwrite duplicates by later ZIPs
+          merged.set(name, data);
           processedCount++;
           setProgress({
             current: processedCount,
@@ -88,23 +85,37 @@ export default function HomePage() {
         }
       }
 
-      setStatus("Generating combined ZIP...");
-      setProgress({ current: 0, total: 100, stage: "Packaging" });
+      // Save to folder using File System Access API
+      if (!("showDirectoryPicker" in window)) {
+        setError("Saving as folder is not supported in this browser. Please use Chrome or Edge.");
+        setProcessing(false);
+        setStatus("");
+        return;
+      }
 
-      const blob = await combined.generateAsync(
-        { type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } },
-        (metadata) => {
-          setProgress({
-            current: Math.floor(metadata.percent),
-            total: 100,
-            stage: "Packaging",
-          });
-        }
-      );
+      setStatus("Select destination folder...");
+      const root = await window.showDirectoryPicker();
 
-      const url = URL.createObjectURL(blob);
-      setDownloadUrl(url);
-      setStatus("Done.");
+      setStatus("Saving files to folder...");
+      const filesOnly = Array.from(merged.entries());
+      setProgress({ current: 0, total: filesOnly.length, stage: "Saving" });
+
+      let savedCount = 0;
+      for (const [path, data] of filesOnly) {
+        const segments = path.split("/").filter(Boolean);
+        const fileName = segments.pop();
+        const parent = await ensureDir(root, flatten ? [] : segments);
+        const fileHandle = await parent.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(new Blob([data]));
+        await writable.close();
+
+        savedCount++;
+        setProgress({ current: savedCount, total: filesOnly.length, stage: "Saving" });
+        await new Promise((r) => setTimeout(r, 0));
+      }
+
+      setStatus("Folder saved.");
       setProcessing(false);
     } catch (err) {
       console.error(err);
@@ -120,10 +131,10 @@ export default function HomePage() {
 
   return (
     <main className="container">
-      <h1>ZIP Merger</h1>
+      <h1>ZIP Extractor</h1>
       <p className="subtitle">
-        Upload multiple ZIP files, merge their contents, and download a single combined ZIP.
-        All processing happens in your browser.
+        Upload multiple ZIP files, merge their contents, and save them directly to a folder.
+        All processing happens in your browser. You will be prompted to choose a destination folder.
       </p>
 
       <div className="card">
@@ -149,9 +160,9 @@ export default function HomePage() {
 
         <div className="actions">
           <button className="button" disabled={!canProcess} onClick={processZips}>
-            {processing ? "Processing..." : "Combine & Download"}
+            {processing ? "Processing..." : "Unzip to Folder"}
           </button>
-          <button className="button secondary" onClick={reset} disabled={processing && !downloadUrl}>
+          <button className="button secondary" onClick={reset} disabled={processing}>
             Reset
           </button>
         </div>
@@ -179,15 +190,6 @@ export default function HomePage() {
         )}
 
         {error && <div className="error">{error}</div>}
-
-        {downloadUrl && (
-          <div className="download">
-            <a className="button primary" href={downloadUrl} download="combined.zip">
-              Download Combined ZIP
-            </a>
-            <p className="hint">If download doesn't start, click the button above.</p>
-          </div>
-        )}
       </div>
 
       <footer className="footer">

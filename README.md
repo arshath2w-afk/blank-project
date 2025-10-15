@@ -1,6 +1,6 @@
-# ZIP Merger (Client-side, Next.js)
+# ZIP Extractor to Folder (Client-side, Next.js)
 
-A simple website that lets users upload multiple ZIP files, unzips them in the browser, merges all files into a single folder (overwriting duplicates), and downloads the result as one ZIP or exports directly to a local folder (supported browsers only). Built with Next.js (App Router), deployed to Vercel. No server-side processing.
+A website that lets users upload multiple ZIP files, unzips them in the browser, merges all files into a single folder (overwriting duplicates), and saves the result directly to a local folder. Built with Next.js (App Router), deployed to Vercel. No server-side processing.
 
 ## Features
 
@@ -8,10 +8,10 @@ A simple website that lets users upload multiple ZIP files, unzips them in the b
 - Client-side unzip with [JSZip](https://stuk.github.io/jszip/).
 - Merge contents into one folder:
   - Preserve folder paths by default.
-  - Optional "Flatten folder structure" toggle.
+  - Optional "Flatten folder structure" toggle (overwrites files with same base name).
   - Overwrites duplicate files (later ZIPs take precedence).
-- Progress and status indicators while extracting and packaging.
-- Download as a single ZIP OR save directly to a folder using the File System Access API (Chrome/Edge).
+- Progress and status indicators while extracting and saving.
+- Saves directly to a local folder using the File System Access API (Chrome/Edge).
 - Works entirely in the browser; files never leave the user's machine.
 
 ## Tech Stack
@@ -68,7 +68,7 @@ Option B — Vercel CLI:
 
 - Large archives: Since everything is client-side, there's no server upload limit. Memory is limited by the user's browser/device; extremely large archives can exhaust memory. If that happens, try processing fewer files at a time.
 - Duplicate files: When combining, files with the same path will be overwritten by later ZIPs. If "Flatten" is enabled, files with the same base name collide (later wins).
-- Folder export: The "Save as Folder" button uses the File System Access API, which is supported in Chromium-based browsers (Chrome, Edge). Other browsers may not support it—use ZIP download instead.
+- Browser support: Saving directly to a folder uses the File System Access API, supported in Chromium-based browsers (Chrome, Edge). Other browsers may not support it.
 - Security: No server; files never leave the browser. Still, avoid opening untrusted archives.
 
 ## License
