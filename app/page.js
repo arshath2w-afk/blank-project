@@ -60,10 +60,10 @@ export default function HomePage() {
 
       // Merge all zips
       let processedCount = 0;
-      for (let i = 0;  <& files.length; i++) {
+      for (let i = 0; i < files.length; i++) {
         const file = files[i];
         setStatus(`Unzipping: ${file.name}`);
-        const arrayBuffer = await file.arrayrayBuffer();
+        const arrayBuffer = await file.arrayBuffer();
         const zip = await JSZip.loadAsync(arrayBuffer);
 
         const entries = Object.values(zip.files);
