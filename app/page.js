@@ -121,27 +121,67 @@ export default function HomePage() {
   // Licensing
   const [licenseKey, setLicenseKey] = useState("");
   const [licensed, setLicensed] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+  const [authStatus, setAuthStatus] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me");
+        const json = await res.json();
+        if (json.ok) {
+          setUserEmail(json.email || "");
+        } else {
+          setUserEmail("");
+        }
+      } catch {}
+    })();
+  }, []);
 
   async function verifyLicense() {
     try {
       const res = await fetch("/api/license/verify", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ licenseKey }),
+        body: JSON.stringify({ licenseKey, email: userEmail || undefined }),
       });
       const json = await res.json();
       setLicensed(!!json.ok);
-      setError(json.ok ? "" : "Invalid license key.");
+      setError(json.ok ? "" : "Invalid or expired license.");
     } catch (e) {
       setError("License verification failed.");
     }
   }
 
+  // Per-run item limits (free)
   const limits = {
-    imageMax: licensed ? Infinity : 10,
-    pdfMax: licensed ? Infinity : 5,
-    zipFolderMaxFiles: licensed ? Infinity : 100,
+    imageMax: licensed ? Infinity : 2,
+    pdfMax: licensed ? Infinity : 2,
+    zipFolderMaxFiles: licensed ? Infinity : 2,
   };
+
+  async function checkQuota(tool) {
+    try {
+      const res = await fetch("/api/quota/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tool, increment: 1, email: userEmail || undefined }),
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        setError(`Daily limit reached for ${tool}. Remaining: ${json.remaining}/${json.limit}. Try again tomorrow.`);
+        return false;
+      }
+      return true;
+    } catch {
+      // If quota check fails, default to denying for free users
+      if (!licensed) {
+        setError("Quota service unavailable. Please try again later.");
+        return false;
+      }
+      return true;
+    }
+  }
 
   const resetCommon = () => {
     setProcessing(false);
@@ -274,11 +314,15 @@ export default function HomePage() {
       setError("Please select a folder using the input.");
       return;
     }
+    if (!licensed) {
+      const ok = await checkQuota("zipFolder");
+      if (!ok) return;
+    }
     try {
       setProcessing(true);
       setError("");
       setStatus("Preparing ZIP...");
-      const zip = new JSZip();
+      const zip =SZip();
 
       // Preserve relative paths via webkitRelativePath if available
       const entries = folderFiles;
@@ -389,12 +433,16 @@ export default function HomePage() {
       setError("Please select PDF files.");
       return;
     }
+    if (!licensed) {
+      const ok = await checkQuota("pdfMerge");
+      if (!ok) return;
+    }
     try {
       setProcessing(true);
       setError("");
       setStatus("Merging PDFs...");
       const mergedPdf = await PDFDocument.create();
-      setProgress({ current: 0, total: pdfFiles.length, stage: "Merging" });
+      setProgress({ current: 0, total: pdfFiles.length, stage: "M);
 
       let count = 0;
       for (const f of pdfFiles) {
@@ -601,7 +649,10 @@ export default function HomePage() {
       case "pdf": return "PDF Merger";
       case "heic": return "HEIC to JPG/PNG (Pro)";
       case "imagepro": return "Image Resize & Watermark (Pro)";
-      case "pdftools": return "PDF Tools ();
+      case "pdftools": return "PDF Tools (Pro)";
+      default: return "Tools";
+    }
+  }, [tab]);
 
   return (
     <main className="container">
