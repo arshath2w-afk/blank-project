@@ -16,7 +16,6 @@ export default function RootLayout({ children }) {
           <nav className="container" style={{ display: "flex", gap: "1rem", alignItems: "center", paddingTop: "0.75rem", paddingBottom: "0.75rem" }}>
             <a href="/" className="button secondary" style={{ textDecoration: "none" }}>Tools</a>
             <a href="/auth" className="button secondary" style={{ textDecoration: "none" }}>Login / Signup</a>
-            <a href="/admin" className="button secondary" style={{ textDecoration: "none" }}>Admin</a>
           </nav>
         </header>
         {children}
