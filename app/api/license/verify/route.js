@@ -3,8 +3,9 @@ export const dynamic = "force-dynamic";
 
 /**
  * Verify a license by key or identity (email/passthrough).
+ * Expired licenses return ok: false.
  * Request body: { licenseKey?: string, email?: string, passthrough?: string }
- * Returns: { ok: boolean }
+ * Returns: { ok: boolean, expiresAt?: number }
  */
 
 async function getLicense(id) {
@@ -33,7 +34,10 @@ export async function POST(req) {
     for (const id of idCandidates) {
       const rec = await getLicense(id);
       if (rec && (rec.licenseKey === licenseKey || rec.email === email || rec.passthrough === passthrough)) {
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        const now = Date.now();
+        const exp = rec.expiresAt || now;
+        const valid = now <= exp;
+        return new Response(JSON.stringify({ ok: !!valid, expiresAt: exp }), { status: 200 });
       }
     }
 

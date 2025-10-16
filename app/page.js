@@ -177,7 +177,15 @@ export default function HomePage() {
   // Zip a folder using webkitdirectory selection
   const handleFolderChange = (e) => {
     let selected = Array.from(e.target.files || []);
-    if (!licensed && selected.length > limits.zipcted.length ? "" : "Please select a folder (files).");
+    if (!licensed && selected.length > limits.zipFolderMaxFiles) {
+      selected = selected.slice(0, limits.zipFolderMaxFiles);
+      setError(`Free tier limited to ${limits.zipFolderMaxFiles} files. DM us for Pro.`);
+    } else if (!selected.length) {
+      setError("Please select a folder (files).");
+    } else {
+      setError("");
+    }
+    setFolderFiles(selected);
     if (zipDownloadUrl) {
       URL.revokeObjectURL(zipDownloadUrl);
       setZipDownloadUrl("");
@@ -224,9 +232,16 @@ export default function HomePage() {
 
   // Image converter
   const handleImageChange = (e) => {
-    let selected = Array.from(e.target.fileses || []).filter((f) => f.type.startsWith("image/"));
+    let selected = Array.from(e.target.files || []).filter((f) => f.type.startsWith("image/"));
+    if (!licensed && selected.length > limits.imageMax) {
+      selected = selected.slice(0, limits.imageMax);
+      setError(`Free tier limited to ${limits.imageMax} images. DM us for Pro.`);
+    } else if (!selected.length) {
+      setError("Please select images.");
+    } else {
+      setError("");
+    }
     setImageFiles(selected);
-    setError(selected.length ? "" : "Please select images.");
     if (imagesZipUrl) {
       URL.revokeObjectURL(imagesZipUrl);
       setImagesZipUrl("");
@@ -348,7 +363,6 @@ export default function HomePage() {
         <TabButton active={tab === "zip"} onClick={() => setTab("zip")}>Zip a Folder</TabButton>
         <TabButton active={tab === "image"} onClick={() => setTab("image")}>Image Converter</TabButton>
         <TabButton active={tab === "pdf"} onClick={() => setTab("pdf")}>PDF Merger</TabButton>
-        <a className="button" href={process.env.NEXT_PUBLIC_PADDLE_CHECKOUT_URL || "#"} target="_blank" rel="noreferrer">Buy Pro</a>
       </div>
 
       <h2 style={{ marginTop: 0 }}>{tabTitle}</h2>
@@ -458,8 +472,10 @@ export default function HomePage() {
       <div className="card" style={{ marginTop: "1rem" }}>
         <strong>Pro features</strong>
         <p className="hint">
-          Unlock higher limits and more tools. Use your license key below or{" "}
-          <a href={process.env.NEXT_PUBLIC_PADDLE_CHECKOUT_URL || "#"} target="_blank" rel="noreferrer">buy Pro</a>.
+          Unlock higher limits and more tools. DM us on Telegram to get a license:
+          <a href={process.env.NEXT_PUBLIC_TELEGRAM_URL || "https://t.me/your_username"} target="_blank" rel="noreferrer" style={{ marginLeft: 6 }}>
+            {process.env.NEXT_PUBLIC_TELEGRAM_URL ? "Contact on Telegram" : "@your_username"}
+          </a>
         </p>
         <div className="actions">
           <input

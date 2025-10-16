@@ -64,28 +64,28 @@ Option B — Vercel CLI:
    vercel --prod
    ```
 
-## Paddle Integration (Pro)
+## Manual Pro Licenses (Telegram)
 
-- Set environment variables in Vercel project settings:
-  - `NEXT_PUBLIC_PADDLE_CHECKOUT_URL`: Your Paddle hosted checkout URL for the product.
-  - `PADDLE_WEBHOOK_SECRET`: Secret used to verify Paddle webhooks (new Paddle).
-  - Optional KV (persistent license store):
-    - `LICENSE_STORE=kv`
-    - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (e.g., Upstash KV REST)
+No payment gateway is integrated. To issue Pro:
+- Ask users to DM you on Telegram. Set `NEXT_PUBLIC_TELEGRAM_URL` to your handle link (e.g., `https://t.me/your_username`).
+- Use the admin page at `/admin` to grant or extend licenses.
 
-- Webhook endpoint:
-  - URL: `https://your-domain.vercel.app/api/paddle/webhook`
-  - In Paddle dashboard, configure a webhook to this URL.
-  - On successful payment, we verify signature and create a license record.
-  - Record is stored in memory by default; configure KV to persist.
+Environment:
+- `ADMIN_TOKEN`: Secret token to protect the admin grant endpoint.
+- Optional KV (persistent license store):
+  - `LICENSE_STORE=kv`
+  - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (e.g., Upstash KV REST)
 
-- License verification:
-  - `/api/license/verify` checks license by key/email/passthrough.
-  - Frontend: users paste license key to unlock Pro limits.
+Endpoints:
+- `POST /api/admin/grant`: Bearer-protected by `ADMIN_TOKEN`. Body:
+  ```json
+  { "email": "user@example.com", "licenseKey": "optional", "passthrough": "optional", "durationDays": 30 }
+  ```
+  If `expiresAt` is omitted, defaults to end of current month (local time). Returns `{ ok, licenseKey, expiresAt }`.
+- `POST /api/license/verify`: Request body `{ licenseKey?: string, email?: string, passthrough?: string }`. Returns `{ ok, expiresAt }`. Automatically returns `ok: false` if expired.
 
-- Notes:
-  - In-memory store resets on redeploy. Use KV for production.
-  - Adjust limits and paywall copy in `app/page.js` as needed.
+Frontend:
+- Users paste license key to unlock Pro limits. The UI links to your Telegram for contact.
 
 ## Notes and Limits
 
