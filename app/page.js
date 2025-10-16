@@ -322,7 +322,7 @@ export default function HomePage() {
       setProcessing(true);
       setError("");
       setStatus("Preparing ZIP...");
-      const zip =SZip();
+      const zip = new JSZip();
 
       // Preserve relative paths via webkitRelativePath if available
       const entries = folderFiles;
@@ -442,7 +442,7 @@ export default function HomePage() {
       setError("");
       setStatus("Merging PDFs...");
       const mergedPdf = await PDFDocument.create();
-      setProgress({ current: 0, total: pdfFiles.length, stage: "M);
+      setProgress({ current: 0, total: pdfFiles.length, stage: "Merging" });
 
       let count = 0;
       for (const f of pdfFiles) {
