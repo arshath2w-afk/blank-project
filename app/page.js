@@ -41,6 +41,31 @@ export default function HomePage() {
   const [pdfFiles, setPdfFiles] = useState([]);
   const [pdfDownloadUrl, setPdfDownloadUrl] = useState("");
 
+  // Licensing
+  const [licenseKey, setLicenseKey] = useState("");
+  const [licensed, setLicensed] = useState(false);
+
+  async function verifyLicense() {
+    try {
+      const res = await fetch("/api/license/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ licenseKey }),
+      });
+      const json = await res.json();
+      setLicensed(!!json.ok);
+      setError(json.ok ? "" : "Invalid license key.");
+    } catch (e) {
+      setError("License verification failed.");
+    }
+  }
+
+  const limits = {
+    imageMax: licensed ? Infinity : 5,
+    pdfMax: licensed ? Infinity : 3,
+    zipFolderMaxFiles: licensed ? Infinity : 50,
+  };
+
   const resetCommon = () => {
     setProcessing(false);
     setError("");
@@ -151,9 +176,8 @@ export default function HomePage() {
 
   // Zip a folder using webkitdirectory selection
   const handleFolderChange = (e) => {
-    const selected = Array.from(e.target.files || []);
-    setFolderFiles(selected);
-    setError(selected.length ? "" : "Please select a folder (files).");
+    let selected = Array.from(e.target.files || []);
+    if (!licensed && selected.length > limits.zipcted.length ? "" : "Please select a folder (files).");
     if (zipDownloadUrl) {
       URL.revokeObjectURL(zipDownloadUrl);
       setZipDownloadUrl("");
@@ -200,7 +224,7 @@ export default function HomePage() {
 
   // Image converter
   const handleImageChange = (e) => {
-    const selected = Array.from(e.target.files || []).filter((f) => f.type.startsWith("image/"));
+    let selected = Array.from(e.target.fileses || []).filter((f) => f.type.startsWith("image/"));
     setImageFiles(selected);
     setError(selected.length ? "" : "Please select images.");
     if (imagesZipUrl) {
@@ -256,9 +280,12 @@ export default function HomePage() {
 
   // PDF merger
   const handlePdfChange = (e) => {
-    const selected = Array.from(e.target.files || []).filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+    let selected = Array.from(e.target.files || []).filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+    if (!licensed && selected.length > limits.pdfMax) {
+      selected = selected.slice(0, limits.pdfMax);
+      setError(`Free tier limited to ${limits.pdfMax} PDFs. Buy Pro for unlimited merges.`);
+    }
     setPdfFiles(selected);
-    setError(selected.length ? "" : "Please select PDF files.");
     if (pdfDownloadUrl) {
       URL.revokeObjectURL(pdfDownloadUrl);
       setPdfDownloadUrl("");
@@ -321,6 +348,7 @@ export default function HomePage() {
         <TabButton active={tab === "zip"} onClick={() => setTab("zip")}>Zip a Folder</TabButton>
         <TabButton active={tab === "image"} onClick={() => setTab("image")}>Image Converter</TabButton>
         <TabButton active={tab === "pdf"} onClick={() => setTab("pdf")}>PDF Merger</TabButton>
+        <a className="button" href={process.env.NEXT_PUBLIC_PADDLE_CHECKOUT_URL || "#"} target="_blank" rel="noreferrer">Buy Pro</a>
       </div>
 
       <h2 style={{ marginTop: 0 }}>{tabTitle}</h2>
@@ -426,6 +454,25 @@ export default function HomePage() {
       )}
 
       {error && <div className="error">{error}</div>}
+
+      <div className="card" style={{ marginTop: "1rem" }}>
+        <strong>Pro features</strong>
+        <p className="hint">
+          Unlock higher limits and more tools. Use your license key below or{" "}
+          <a href={process.env.NEXT_PUBLIC_PADDLE_CHECKOUT_URL || "#"} target="_blank" rel="noreferrer">buy Pro</a>.
+        </p>
+        <div className="actions">
+          <input
+            type="text"
+            placeholder="Enter license key"
+            value={licenseKey}
+            onChange={(e) => setLicenseKey(e.target.value)}
+            style={{ flex: "1", minWidth: "200px" }}
+          />
+          <button className="button" onClick={verifyLicense}>Verify</button>
+          {licensed && <span style={{ color: "var(--accent)" }}>Pro active</span>}
+        </div>
+      </div>
 
       <footer className="footer">
         <small>Client-side only. No files are uploaded to a server.</small>

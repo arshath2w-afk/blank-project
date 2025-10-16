@@ -64,6 +64,29 @@ Option B — Vercel CLI:
    vercel --prod
    ```
 
+## Paddle Integration (Pro)
+
+- Set environment variables in Vercel project settings:
+  - `NEXT_PUBLIC_PADDLE_CHECKOUT_URL`: Your Paddle hosted checkout URL for the product.
+  - `PADDLE_WEBHOOK_SECRET`: Secret used to verify Paddle webhooks (new Paddle).
+  - Optional KV (persistent license store):
+    - `LICENSE_STORE=kv`
+    - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (e.g., Upstash KV REST)
+
+- Webhook endpoint:
+  - URL: `https://your-domain.vercel.app/api/paddle/webhook`
+  - In Paddle dashboard, configure a webhook to this URL.
+  - On successful payment, we verify signature and create a license record.
+  - Record is stored in memory by default; configure KV to persist.
+
+- License verification:
+  - `/api/license/verify` checks license by key/email/passthrough.
+  - Frontend: users paste license key to unlock Pro limits.
+
+- Notes:
+  - In-memory store resets on redeploy. Use KV for production.
+  - Adjust limits and paywall copy in `app/page.js` as needed.
+
 ## Notes and Limits
 
 - Large archives: Since everything is client-side, there's no server upload limit. Memory is limited by the user's browser/device; extremely large archives can exhaust memory. If that happens, try processing fewer files at a time.
