@@ -29,11 +29,22 @@ export async function POST(req) {
     const body = await req.json();
     const { licenseKey, email, passthrough } = body || {};
 
-    // Try id resolution in order of passthrough > email > licenseKey
-    const idCandidates = [passthrough, email, licenseKey].filter(Boolean);
+    // Try licenseKey first (we store under licenseKey)
+    if (licenseKey) {
+      const rec = await getLicense(licenseKey);
+      if (rec) {
+        const now = Date.now();
+        const exp = rec.expiresAt || now;
+        const valid = now <= exp;
+        return new Response(JSON.stringify({ ok: !!valid, expiresAt: exp }), { status: 200 });
+      }
+    }
+
+    // Fallback to email/passthrough
+    const idCandidates = [passthrough, email].filter(Boolean);
     for (const id of idCandidates) {
       const rec = await getLicense(id);
-      if (rec && (rec.licenseKey === licenseKey || rec.email === email || rec.passthrough === passthrough)) {
+      if (rec && (rec.email === email || rec.passthrough === passthrough)) {
         const now = Date.now();
         const exp = rec.expiresAt || now;
         const valid = now <= exp;
