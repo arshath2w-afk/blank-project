@@ -1,30 +1,60 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import JSZip from "jszip";
+import { PDFDocument } from "pdf-lib";
+
+function TabButton({ active, onClick, children }) {
+  return (
+    <button
+      className={`button ${active ? "primary" : "secondary"}`}
+      onClick={onClick}
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
 
 export default function HomePage() {
-  const [files, setFiles] = useState([]);
+  const [tab, setTab] = useState("unzip"); // unzip | zip | image | pdf
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [progress, setProgress] = useState({ current: 0, total: 0, stage: "" });
+
+  // Unzip to folder
+  const [zipFiles, setZipFiles] = useState([]);
   const [flatten, setFlatten] = useState(false);
 
-  const handleFileChange = (e) => {
-    const selected = Array.from(e.target.files || []).filter((f) =>
-      f.name.toLowerCase().endsWith(".zip")
-    );
-    setFiles(selected);
-    setError(selected.length ? "" : "Please select one or more .zip files.");
-  };
+  // Zip a folder
+  const [folderFiles, setFolderFiles] = useState([]);
+  const [zipDownloadUrl, setZipDownloadUrl] = useState("");
 
-  const reset = () => {
-    setFiles([]);
+  // Image converter
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imageTarget, setImageTarget] = useState("image/webp"); // image/webp | image/jpeg | image/png
+  const [imageQuality, setImageQuality] = useState(0.9);
+  const [imagesZipUrl, setImagesZipUrl] = useState("");
+
+  // PDF merger
+  const [pdfFiles, setPdfFiles] = useState([]);
+  const [pdfDownloadUrl, setPdfDownloadUrl] = useState("");
+
+  const resetCommon = () => {
     setProcessing(false);
     setError("");
     setStatus("");
     setProgress({ current: 0, total: 0, stage: "" });
+  };
+
+  // Unzip handlers
+  const handleZipChange = (e) => {
+    const selected = Array.from(e.target.files || []).filter((f) =>
+      f.name.toLowerCase().endsWith(".zip")
+    );
+    setZipFiles(selected);
+    setError(selected.length ? "" : "Please select one or more .zip files.");
   };
 
   async function ensureDir(root, parts) {
@@ -35,8 +65,8 @@ export default function HomePage() {
     return dir;
   }
 
-  async function processZips() {
-    if (!files.length) {
+  async function unzipToFolder() {
+    if (!zipFiles.length) {
       setError("Please select one or more .zip files.");
       return;
     }
@@ -46,21 +76,21 @@ export default function HomePage() {
       setError("");
       setStatus("Reading ZIPs...");
 
-      // Pre-count total files for coarse progress
+      // Pre-count
       let totalFilesCount = 0;
-      for (const f of files) {
+      for (const f of zipFiles) {
         const ab = await f.arrayBuffer();
         const z = await JSZip.loadAsync(ab);
         totalFilesCount += Object.values(z.files).filter((entry) => !entry.dir).length;
       }
       setProgress({ current: 0, total: totalFilesCount, stage: "Extracting" });
 
-      // Extract and merge all zips into memory map
-      const merged = new Map(); // path -> Uint8Array
+      // Merge
+      const merged = new Map();
       let processedCount = 0;
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (let i = 0; i < zipFiles.length; i++) {
+        const file = zipFiles[i];
         setStatus(`Unzipping: ${file.name}`);
         const arrayBuffer = await file.arrayBuffer();
         const zip = await JSZip.loadAsync(arrayBuffer);
@@ -71,7 +101,6 @@ export default function HomePage() {
           const name = flatten ? entry.name.split("/").pop() : entry.name;
           const data = await entry.async("uint8array");
 
-          // Overwrite duplicates by later ZIPs
           merged.set(name, data);
           processedCount++;
           setProgress({
@@ -79,17 +108,13 @@ export default function HomePage() {
             total: totalFilesCount,
             stage: "Extracting",
           });
-
-          // Yield to UI for large sets
           await new Promise((r) => setTimeout(r, 0));
         }
       }
 
-      // Save to folder using File System Access API
       if (!("showDirectoryPicker" in window)) {
         setError("Saving as folder is not supported in this browser. Please use Chrome or Edge.");
-        setProcessing(false);
-        setStatus("");
+        resetCommon();
         return;
       }
 
@@ -119,78 +144,288 @@ export default function HomePage() {
       setProcessing(false);
     } catch (err) {
       console.error(err);
-      setError(
-        "Failed to process ZIPs. Ensure all files are valid ZIP archives. If the browser runs out of memory, try processing fewer files at once."
-      );
-      setProcessing(false);
-      setStatus("");
+      setError("Failed to unzip. Ensure files are valid ZIP archives.");
+      resetCommon();
     }
   }
 
-  const canProcess = files.length > 0 && !processing;
+  // Zip a folder using webkitdirectory selection
+  const handleFolderChange = (e) => {
+    const selected = Array.from(e.target.files || []);
+    setFolderFiles(selected);
+    setError(selected.length ? "" : "Please select a folder (files).");
+    if (zipDownloadUrl) {
+      URL.revokeObjectURL(zipDownloadUrl);
+      setZipDownloadUrl("");
+    }
+  };
+
+  async function zipSelectedFolder() {
+    if (!folderFiles.length) {
+      setError("Please select a folder using the input.");
+      return;
+    }
+    try {
+      setProcessing(true);
+      setError("");
+      setStatus("Preparing ZIP...");
+      const zip = new JSZip();
+
+      // Preserve relative paths via webkitRelativePath if available
+      const entries = folderFiles;
+      setProgress({ current: 0, total: entries.length, stage: "Zipping" });
+
+      let count = 0;
+      for (const file of entries) {
+        const ab = await file.arrayBuffer();
+        const rel = file.webkitRelativePath || file.name;
+        zip.file(rel, ab);
+        count++;
+        setProgress({ current: count, total: entries.length, stage: "Zipping" });
+        await new Promise((r) => setTimeout(r, 0));
+      }
+
+      setStatus("Generating ZIP...");
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+      const url = URL.createObjectURL(blob);
+      setZipDownloadUrl(url);
+      setStatus("Ready.");
+      setProcessing(false);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to zip folder.");
+      resetCommon();
+    }
+  }
+
+  // Image converter
+  const handleImageChange = (e) => {
+    const selected = Array.from(e.target.files || []).filter((f) => f.type.startsWith("image/"));
+    setImageFiles(selected);
+    setError(selected.length ? "" : "Please select images.");
+    if (imagesZipUrl) {
+      URL.revokeObjectURL(imagesZipUrl);
+      setImagesZipUrl("");
+    }
+  };
+
+  async function convertImages() {
+    if (!imageFiles.length) {
+      setError("Please select images.");
+      return;
+    }
+    try {
+      setProcessing(true);
+      setError("");
+      setStatus("Converting images...");
+      const zip = new JSZip();
+      setProgress({ current: 0, total: imageFiles.length, stage: "Converting" });
+
+      let count = 0;
+      for (const file of imageFiles) {
+        const bitmap = await createImageBitmap(file);
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(bitmap, 0, 0);
+        const blob = await new Promise((resolve) =>
+          canvas.toBlob(resolve, imageTarget, imageTarget === "image/jpeg" ? imageQuality : undefined)
+        );
+        const baseName = file.name.replace(/\.[^.]+$/, "");
+        const ext = imageTarget.split("/")[1];
+        const buf = await blob.arrayBuffer();
+        zip.file(`${baseName}.${ext}`, buf);
+        count++;
+        setProgress({ current: count, total: imageFiles.length, stage: "Converting" });
+        await new Promise((r) => setTimeout(r, 0));
+      }
+
+      setStatus("Packaging converted images...");
+      const outBlob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(outBlob);
+      setImagesZipUrl(url);
+      setStatus("Ready.");
+      setProcessing(false);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to convert images.");
+      resetCommon();
+    }
+  }
+
+  // PDF merger
+  const handlePdfChange = (e) => {
+    const selected = Array.from(e.target.files || []).filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+    setPdfFiles(selected);
+    setError(selected.length ? "" : "Please select PDF files.");
+    if (pdfDownloadUrl) {
+      URL.revokeObjectURL(pdfDownloadUrl);
+      setPdfDownloadUrl("");
+    }
+  };
+
+  async function mergePdfs() {
+    if (!pdfFiles.length) {
+      setError("Please select PDF files.");
+      return;
+    }
+    try {
+      setProcessing(true);
+      setError("");
+      setStatus("Merging PDFs...");
+      const mergedPdf = await PDFDocument.create();
+      setProgress({ current: 0, total: pdfFiles.length, stage: "Merging" });
+
+      let count = 0;
+      for (const f of pdfFiles) {
+        const ab = await f.arrayBuffer();
+        const src = await PDFDocument.load(ab);
+        const copied = await mergedPdf.copyPages(src, src.getPageIndices());
+        for (const p of copied) mergedPdf.addPage(p);
+        count++;
+        setProgress({ current: count, total: pdfFiles.length, stage: "Merging" });
+        await new Promise((r) => setTimeout(r, 0));
+      }
+
+      const out = await mergedPdf.save();
+      const blob = new Blob([out], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      setPdfDownloadUrl(url);
+      setStatus("Ready.");
+      setProcessing(false);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to merge PDFs.");
+      resetCommon();
+    }
+  }
+
+  const tabTitle = useMemo(() => {
+    switch (tab) {
+      case "unzip": return "Unzip to Folder";
+      case "zip": return "Zip a Folder";
+      case "image": return "Image Converter";
+      case "pdf": return "PDF Merger";
+      default: return "Tools";
+    }
+  }, [tab]);
 
   return (
     <main className="container">
-      <h1>ZIP Extractor</h1>
-      <p className="subtitle">
-        Upload multiple ZIP files, merge their contents, and save them directly to a folder.
-        All processing happens in your browser. You will be prompted to choose a destination folder.
-      </p>
+      <h1>Archive & File Tools</h1>
+      <p className="subtitle">Client-side utilities to help you work with ZIPs, images, and PDFs. No files are uploaded to any server.</p>
 
-      <div className="card">
-        <label className="label" htmlFor="zipInput">Select ZIP files</label>
-        <input
-          id="zipInput"
-          type="file"
-          accept=".zip,application/zip"
-          multiple
-          onChange={handleFileChange}
-        />
+      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+        <TabButton active={tab === "unzip"} onClick={() => setTab("unzip")}>Unzip to Folder</TabButton>
+        <TabButton active={tab === "zip"} onClick={() => setTab("zip")}>Zip a Folder</TabButton>
+        <TabButton active={tab === "image"} onClick={() => setTab("image")}>Image Converter</TabButton>
+        <TabButton active={tab === "pdf"} onClick={() => setTab("pdf")}>PDF Merger</TabButton>
+      </div>
 
-        <div className="options">
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={flatten}
-              onChange={(e) => setFlatten(e.target.checked)}
-            />
-            Flatten folder structure (overwrites files with the same name)
-          </label>
+      <h2 style={{ marginTop: 0 }}>{tabTitle}</h2>
+
+      {tab === "unzip" && (
+        <div className="card">
+          <label className="label" htmlFor="zipInput">Select ZIP files</label>
+          <input id="zipInput" type="file" accept=".zip,application/zip" multiple onChange={handleZipChange} />
+          <div className="options">
+            <label className="checkbox">
+              <input type="checkbox" checked={flatten} onChange={(e) => setFlatten(e.target.checked)} />
+              Flatten folder structure (overwrites files with the same name)
+            </label>
+          </div>
+          <div className="actions">
+            <button className="button" disabled={!zipFiles.length || processing} onClick={unzipToFolder}>
+              {processing ? "Processing..." : "Unzip to Folder"}
+            </button>
+          </div>
         </div>
+      )}
 
-        <div className="actions">
-          <button className="button" disabled={!canProcess} onClick={processZips}>
-            {processing ? "Processing..." : "Unzip to Folder"}
-          </button>
-          <button className="button secondary" onClick={reset} disabled={processing}>
-            Reset
-          </button>
+      {tab === "zip" && (
+        <div className="card">
+          <label className="label" htmlFor="folderInput">Select a Folder</label>
+          <input id="folderInput" type="file" webkitdirectory="" multiple onChange={handleFolderChange} />
+          <div className="actions">
+            <button className="button" disabled={!folderFiles.length || processing} onClick={zipSelectedFolder}>
+              {processing ? "Processing..." : "Create ZIP"}
+            </button>
+            {zipDownloadUrl && (
+              <a className="button primary" href={zipDownloadUrl} download="folder.zip">Download ZIP</a>
+            )}
+          </div>
         </div>
+      )}
 
-        {status && (
-          <div className="status">
-            <strong>Status:</strong> {status}
-            {progress.stage && (
+      {tab === "image" && (
+        <div className="card">
+          <label className="label" htmlFor="imageInput">Select Images</label>
+          <input id="imageInput" type="file" accept="image/*" multiple onChange={handleImageChange} />
+          <div className="options" style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+            <label>Format:
+              <select value={imageTarget} onChange={(e) => setImageTarget(e.target.value)} style={{ marginLeft: "0.5rem" }}>
+                <option value="image/webp">WEBP</option>
+                <option value="image/jpeg">JPEG</option>
+                <option value="image/png">PNG</option>
+              </select>
+            </label>
+            {imageTarget === "image/jpeg" && (
+              <label>Quality:
+                <input type="range" min="0.1" max="1" step="0.05" value={imageQuality}
+                  onChange={(e) => setImageQuality(parseFloat(e.target.value))}
+                  style={{ marginLeft: "0.5rem", verticalAlign: "middle" }} />
+              </label>
+            )}
+          </div>
+          <div className="actions">
+            <button className="button" disabled={!imageFiles.length || processing} onClick={convertImages}>
+              {processing ? "Processing..." : "Convert & Download"}
+            </button>
+            {imagesZipUrl && (
+              <a className="button primary" href={imagesZipUrl} download="converted_images.zip">Download Converted Images</a>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === "pdf" && (
+        <div className="card">
+          <label className="label" htmlFor="pdfInput">Select PDF files</label>
+          <input id="pdfInput" type="file" accept="application/pdf" multiple onChange={handlePdfChange} />
+          <div className="actions">
+            <button className="button" disabled={!pdfFiles.length || processing} onClick={mergePdfs}>
+              {processing ? "Processing..." : "Merge & Download"}
+            </button>
+            {pdfDownloadUrl && (
+              <a className="button primary" href={pdfDownloadUrl} download="merged.pdf">Download Merged PDF</a>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(status || progress.stage) && (
+        <div className="status" style={{ marginTop: "1rem" }}>
+          {status && <div><strong>Status:</strong> {status}</div>}
+          {progress.stage && (
+            <>
               <div className="progress">
                 <div
                   className="bar"
                   style={{
-                    width: `${Math.min(
-                      100,
-                      Math.floor((progress.current / progress.total) * 100)
-                    )}%`,
+                    width: `${Math.min(100, Math.floor((progress.current / (progress.total || 1)) * 100))}%`,
                   }}
                 />
               </div>
-            )}
-            <div className="progress-details">
-              {progress.stage} {progress.total ? `(${progress.current}/${progress.total})` : ""}
-            </div>
-          </div>
-        )}
+              <div className="progress-details">
+                {progress.stage} {progress.total ? `(${progress.current}/${progress.total})` : ""}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
-        {error && <div className="error">{error}</div>}
-      </div>
+      {error && <div className="error">{error}</div>}
 
       <footer className="footer">
         <small>Client-side only. No files are uploaded to a server.</small>
