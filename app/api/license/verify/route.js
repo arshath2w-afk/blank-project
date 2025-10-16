@@ -1,6 +1,8 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { getDb } from "../../../lib/mongo";
+
 /**
  * Verify a license by key or identity (email/passthrough).
  * Binds first successful verification to an email, preventing reuse across accounts.
@@ -30,6 +32,11 @@ async function kvSet(id, value) {
 }
 
 async function getLicense(id) {
+  const db = await getDb();
+  if (db) {
+    const col = db.collection("licenses");
+    return await col.findOne({ $or: [{ licenseKey: id }, { email: id }, { passthrough: id }] });
+  }
   if (process.env.LICENSE_STORE === "kv" && process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     return await kvGet(id);
   } else {
@@ -40,6 +47,14 @@ async function getLicense(id) {
 }
 
 async function putLicense(id, value) {
+  const db = await getDb();
+  if (db) {
+    const col = db.collection("licenses");
+    await col.updateOne({ licenseKey: value.licenseKey }, { $set: value }, { upsert: true });
+    if (value.email) await col.updateOne({ email: value.email }, { $set: value }, { upsert: true });
+    if (value.passthrough) await col.updateOne({ passthrough: value.passthrough }, { $set: value }, { upsert: true });
+    return;
+  }
   if (process.env.LICENSE_STORE === "kv" && process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     await kvSet(id, value);
   } else {
