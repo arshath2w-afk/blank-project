@@ -39,12 +39,15 @@ async function putLicense(key, value) {
 export async function POST(req) {
   try {
     const auth = req.headers.get("authorization") || req.headers.get("Authorization");
-    const token = (auth || "").replace(/^Bearer\\s+/i, "");
-    if (!process.env.ADMIN_TOKEN || token !== process.env.ADMIN_TOKEN) {
+    const headerToken = (auth || "").replace(/^Bearer\s+/i, "");
+    const body = await req.json();
+    const bodyToken = body?.adminToken || "";
+
+    const providedToken = headerToken || bodyToken;
+    if (!process.env.ADMIN_TOKEN || providedToken !== process.env.ADMIN_TOKEN) {
       return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), { status: 401 });
     }
 
-    const body = await req.json();
     const { email, licenseKey: lk, passthrough, expiresAt, durationDays } = body || {};
     const licenseKey = lk || crypto.randomUUID();
 
