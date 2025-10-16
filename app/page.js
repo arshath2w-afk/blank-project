@@ -3,7 +3,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
-import heic2any from "heic2any";
 
 function TabButton({ active, onClick, children }) {
   return (
@@ -478,6 +477,8 @@ export default function HomePage() {
       return;
     }
     try {
+      const { default: heic2any } = await import("heic2any");
+
       setProcessing(true);
       setError("");
       setStatus("Converting HEIC images...");
