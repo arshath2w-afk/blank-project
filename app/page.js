@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
 
@@ -13,6 +13,58 @@ function TabButton({ active, onClick, children }) {
     >
       {children}
     </button>
+  );
+}
+
+function AuthBox({ userEmail, setUserEmail, setAuthStatus }) {
+  const [mode, setMode] = useState("login"); // login | signup
+  const [email, setEmail] = useState(userEmail || "");
+  const [password, setPassword] = useState("");
+
+  useEffect(() => setEmail(userEmail || ""), [userEmail]);
+
+  async function submit() {
+    try {
+      const url = mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        setAuthStatus(json.error || "Auth failed");
+        return;
+      }
+      if (mode === "signup") {
+        setAuthStatus("Signup successful. Please log in.");
+      } else {
+        setAuthStatus("Logged in.");
+        setUserEmail(email);
+      }
+    } catch (e) {
+      setAuthStatus("Auth request failed.");
+    }
+  }
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setUserEmail("");
+    setAuthStatus("Logged out.");
+  }
+
+  return (
+    <div className="actions" style={{ flexDirection: "column", alignItems: "stretch", gap: "0.5rem" }}>
+      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+        <button className={`button ${mode === "login" ? "primary" : "secondary"}`} type="button" onClick={() => setMode("login")}>Login</button>
+        <button className={`button ${mode === "signup" ? "primary" : "secondary"}`} type="button" onClick={() => setMode("signup")}>Sign up</button>
+        {userEmail && <button className="button secondary" type="button" onClick={logout}>Logout</button>}
+      </div>
+      <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+      <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+      <button className="button" type="button" onClick={submit}>{mode === "signup" ? "Create account" : "Login"}</button>
+      {userEmail && <div className="hint">Logged in as {userEmail}</div>}
+    </div>
   );
 }
 
