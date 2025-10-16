@@ -64,6 +64,29 @@ Option B — Vercel CLI:
    vercel --prod
    ```
 
+## Manual Pro Licenses (Telegram)
+
+No payment gateway is integrated. To issue Pro:
+- Ask users to DM you on Telegram. Set `NEXT_PUBLIC_TELEGRAM_URL` to your handle link (e.g., `https://t.me/your_username`).
+- Use the admin page at `/admin` to grant or extend licenses.
+
+Environment:
+- `ADMIN_TOKEN`: Secret token to protect the admin grant endpoint.
+- Optional KV (persistent license store):
+  - `LICENSE_STORE=kv`
+  - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (e.g., Upstash KV REST)
+
+Endpoints:
+- `POST /api/admin/grant`: Bearer-protected by `ADMIN_TOKEN`. Body:
+  ```json
+  { "email": "user@example.com", "licenseKey": "optional", "passthrough": "optional", "durationDays": 30 }
+  ```
+  If `expiresAt` is omitted, defaults to end of current month (local time). Returns `{ ok, licenseKey, expiresAt }`.
+- `POST /api/license/verify`: Request body `{ licenseKey?: string, email?: string, passthrough?: string }`. Returns `{ ok, expiresAt }`. Automatically returns `ok: false` if expired.
+
+Frontend:
+- Users paste license key to unlock Pro limits. The UI links to your Telegram for contact.
+
 ## Notes and Limits
 
 - Large archives: Since everything is client-side, there's no server upload limit. Memory is limited by the user's browser/device; extremely large archives can exhaust memory. If that happens, try processing fewer files at a time.

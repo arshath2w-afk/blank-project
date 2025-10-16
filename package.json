@@ -1,8 +1,8 @@
 {
   "name": "zip-merger-nextjs",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Client-side ZIP merger using JSZip, built with Next.js (App Router) for Vercel deployment.",
+  "description": "Client-side archive tools: unzip to folder, zip a folder, image converter, PDF merger. Built with Next.js for Vercel.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,6 +11,7 @@
   "dependencies": {
     "jszip": "^3.10.1",
     "next": "^15.5.5",
+    "pdf-lib": "^1.17.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   }
