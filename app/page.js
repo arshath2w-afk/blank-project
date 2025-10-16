@@ -3,7 +3,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
-import heic2any from "heic2any";
 
 function TabButton({ active, onClick, children }) {
   return (
@@ -322,7 +321,7 @@ export default function HomePage() {
       setProcessing(true);
       setError("");
       setStatus("Preparing ZIP...");
-      const zip =SZip();
+      const zip = new JSZip();
 
       // Preserve relative paths via webkitRelativePath if available
       const entries = folderFiles;
@@ -442,7 +441,7 @@ export default function HomePage() {
       setError("");
       setStatus("Merging PDFs...");
       const mergedPdf = await PDFDocument.create();
-      setProgress({ current: 0, total: pdfFiles.length, stage: "M);
+      setProgress({ current: 0, total: pdfFiles.length, stage: "Merging" });
 
       let count = 0;
       for (const f of pdfFiles) {
@@ -478,6 +477,8 @@ export default function HomePage() {
       return;
     }
     try {
+      const { default: heic2any } = await import("heic2any");
+
       setProcessing(true);
       setError("");
       setStatus("Converting HEIC images...");
