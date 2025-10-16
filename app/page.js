@@ -69,7 +69,7 @@ function AuthBox({ userEmail, setUserEmail, setAuthStatus }) {
 }
 
 export default function HomePage() {
-  const [tab, setTab] = useState("unzip"); // unzip | zip | image | pdf | heic | imagepro | pdftools
+  const [tab, setTab] = useState("unzip"); // unzip | zip | image | pdf | heic | imagepro | pdftools | ocr | qr
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
@@ -668,6 +668,8 @@ export default function HomePage() {
         <TabButton active={tab === "heic"} onClick={() => setTab("heic")}>HEIC to JPG/PNG (Pro)</TabButton>
         <TabButton active={tab === "imagepro"} onClick={() => setTab("imagepro")}>Image Resize & Watermark (Pro)</TabButton>
         <TabButton active={tab === "pdftools"} onClick={() => setTab("pdftools")}>PDF Tools (Pro)</TabButton>
+        <TabButton active={tab === "ocr"} onClick={() => setTab("ocr")}>OCR (Free API)</TabButton>
+        <TabButton active={tab === "qr"} onClick={() => setTab("qr")}>QR Generator (Free)</TabButton>
       </div>
 
       <h2 style={{ marginTop: 0 }}>{tabTitle}</h2>
@@ -896,6 +898,89 @@ export default function HomePage() {
             )}
           </div>
           {!licensed && <div className="hint">Pro only. Get a license via Telegram.</div>}
+        </div>
+      )}
+
+      {tab === "ocr" && (
+        <div className="card">
+          <label className="label" htmlFor="ocrInput">OCR (Free API) - Image or URL</label>
+          <input id="ocrInput" type="file" accept="image/*,application/pdf" onChange={async (e) => {
+            const file = e.target.files?.[0];
+            setError("");
+            setStatus("");
+            if (!file) { setError("Please select a file."); return; }
+            try {
+              setProcessing(true);
+              setStatus("Uploading to OCR...");
+              const ab = await file.arrayBuffer();
+              const base64 = `data:${file.type};base64,${btoa(String.fromCharCode(...new Uint8Array(ab)))}`;
+              const res = await fetch("/api/ocr", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ base64 }),
+              });
+              const json = await res.json();
+              if (!json.ok) { setError("OCR failed."); setProcessing(false); return; }
+              const blob = new Blob([json.text || ""], { type: "text/plain" });
+              const url = URL.createObjectURL(blob);
+              setStatus("OCR complete.");
+              setImagesZipUrl(""); // avoid mixing download buttons
+              setPdfDownloadUrl("");
+              setHeicZipUrl("");
+              setWmZipUrl("");
+              setPdfToolsZipUrl("");
+              // temporarily reuse imagesZipUrl slot for OCR text download
+              setImagesZipUrl(url);
+            } catch (err) {
+              console.error(err);
+              setError("OCR error.");
+            } finally {
+              setProcessing(false);
+            }
+          }} />
+          <div className="actions">
+            {imagesZipUrl && (
+              <a className="button primary" href={imagesZipUrl} download="ocr.txt">Download OCR Text</a>
+            )}
+          </div>
+          <div className="hint">Powered by OCR.space free API. Set OCR_SPACE_API_KEY for production.</div>
+        </div>
+      )}
+
+      {tab === "qr" && (
+        <div className="card">
+          <label className="label" htmlFor="qrText">QR Generator (Free)</label>
+          <input id="qrText" type="text" placeholder="Enter text/URL" onChange={async (e) => {
+            const text = e.target.value;
+            setError("");
+            setStatus("");
+            if (!text) return;
+            try {
+              setProcessing(true);
+              setStatus("Generating QR...");
+              const apiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(text)}`;
+              const resp = await fetch(apiUrl);
+              const blob = await resp.blob();
+              const url = URL.createObjectURL(blob);
+              setStatus("QR ready.");
+              setPdfDownloadUrl("");
+              setHeicZipUrl("");
+              setWmZipUrl("");
+              setPdfToolsZipUrl("");
+              setImagesZipUrl(url);
+            } catch (err) {
+              console.error(err);
+              setError("QR generation failed.");
+            } finally {
+              setProcessing(false);
+            }
+          }} />
+          <div className="actions">
+            {imagesZipUrl && (
+              <a className="button primary" href={imagesZipUrl} download="qr.png">Download QR</a>
+            )}
+          </div>
+          <div className="hint">Powered by api.qrserver.com free service.</div>
         </div>
       )}
 
