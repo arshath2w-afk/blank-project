@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
+import heic2any from "heic2any";
 
 function TabButton({ active, onClick, children }) {
   return (
@@ -69,7 +70,7 @@ function AuthBox({ userEmail, setUserEmail, setAuthStatus }) {
 }
 
 export default function HomePage() {
-  const [tab, setTab] = useState("unzip"); // unzip | zip | image | pdf
+  const [tab, setTab] = useState("unzip"); // unzip | zip | image | pdf | heic
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
@@ -93,6 +94,11 @@ export default function HomePage() {
   const [pdfFiles, setPdfFiles] = useState([]);
   const [pdfDownloadUrl, setPdfDownloadUrl] = useState("");
 
+  // HEIC converter (Pro)
+  const [heicFiles, setHeicFiles] = useState([]);
+  const [heicTarget, setHeicTarget] = useState("image/jpeg"); // image/jpeg | image/png
+  const [heicZipUrl, setHeicZipUrl] = useState("");
+
   // Licensing
   const [licenseKey, setLicenseKey] = useState("");
   const [licensed, setLicensed] = useState(false);
@@ -113,9 +119,9 @@ export default function HomePage() {
   }
 
   const limits = {
-    imageMax: licensed ? Infinity : 5,
-    pdfMax: licensed ? Infinity : 3,
-    zipFolderMaxFiles: licensed ? Infinity : 50,
+    imageMax: licensed ? Infinity : 10,
+    pdfMax: licensed ? Infinity : 5,
+    zipFolderMaxFiles: licensed ? Infinity : 100,
   };
 
   const resetCommon = () => {
@@ -395,6 +401,45 @@ export default function HomePage() {
     }
   }
 
+  async function convertHeic() {
+    if (!licensed) {
+      setError("HEIC conversion is Pro only.");
+      return;
+    }
+    if (!heicFiles.length) {
+      setError("Please select HEIC images.");
+      return;
+    }
+    try {
+      setProcessing(true);
+      setError("");
+      setStatus("Converting HEIC images...");
+      const zip = new JSZip();
+      setProgress({ current: 0, total: heicFiles.length, stage: "Converting" });
+      let count = 0;
+      for (const file of heicFiles) {
+        const outBlob = await heic2any({ blob: file, toType: heicTarget });
+        const baseName = file.name.replace(/\\.heic$/i, "");
+        const ext = heicTarget.split("/")[1];
+        const buf = await outBlob.arrayBuffer();
+        zip.file(`${baseName}.${ext}`, buf);
+        count++;
+        setProgress({ current: count, total: heicFiles.length, stage: "Converting" });
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      setStatus("Packaging converted images...");
+      const outZipBlob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(outZipBlob);
+      setHeicZipUrl(url);
+      setStatus("Ready.");
+      setProcessing(false);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to convert HEIC images.");
+      resetCommon();
+    }
+  }
+
   const tabTitle = useMemo(() => {
     switch (tab) {
       case "unzip": return "Unzip to Folder";
@@ -415,6 +460,7 @@ export default function HomePage() {
         <TabButton active={tab === "zip"} onClick={() => setTab("zip")}>Zip a Folder</TabButton>
         <TabButton active={tab === "image"} onClick={() => setTab("image")}>Image Converter</TabButton>
         <TabButton active={tab === "pdf"} onClick={() => setTab("pdf")}>PDF Merger</TabButton>
+        <TabButton active={tab === "heic"} onClick={() => setTab("heic")}>HEIC to JPG/PNG (Pro)</TabButton>
       </div>
 
       <h2 style={{ marginTop: 0 }}>{tabTitle}</h2>
@@ -495,6 +541,43 @@ export default function HomePage() {
               <a className="button primary" href={pdfDownloadUrl} download="merged.pdf">Download Merged PDF</a>
             )}
           </div>
+        </div>
+      )}
+
+      {tab === "heic" && (
+        <div className="card">
+          <label className="label" htmlFor="heicInput">Select HEIC images (Pro)</label>
+          <input id="heicInput" type="file" accept=".heic,image/heic" multiple onChange={(e) => {
+            if (!licensed) {
+              setError("HEIC conversion is a Pro feature. DM us for a license.");
+              setHeicFiles([]);
+              return;
+            }
+            const selected = Array.from(e.target.files || []).filter((f) => /\.(heic)$/i.test(f.name));
+            setHeicFiles(selected);
+            setError(selected.length ? "" : "Please select HEIC images.");
+            if (heicZipUrl) {
+              URL.revokeObjectURL(heicZipUrl);
+              setHeicZipUrl("");
+            }
+          }} />
+          <div className="options" style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+            <label>Target:
+              <select value={heicTarget} onChange={(e) => setHeicTarget(e.target.value)} style={{ marginLeft: "0.5rem" }}>
+                <option value="image/jpeg">JPEG</option>
+                <option value="image/png">PNG</option>
+              </select>
+            </label>
+          </div>
+          <div className="actions">
+            <button className="button" disabled={!licensed || !heicFiles.length || processing} onClick={convertHeic}>
+              {processing ? "Processing..." : "Convert HEIC"}
+            </button>
+            {heicZipUrl && (
+              <a className="button primary" href={heicZipUrl} download="heic_converted.zip">Download Converted Images</a>
+            )}
+          </div>
+          {!licensed && <div className="hint">Pro only. Get a license via Telegram.</div>}
         </div>
       )}
 

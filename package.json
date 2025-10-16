@@ -1,14 +1,15 @@
 {
   "name": "zip-merger-nextjs",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
-  "description": "Client-side archive tools: unzip to folder, zip a folder, image converter, PDF merger. Built with Next.js for Vercel.",
+  "description": "Client-side archive tools: unzip to folder, zip a folder, image converter, PDF merger, HEIC to JPG/PNG. Built with Next.js for Vercel.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start"
   },
   "dependencies": {
+    "heic2any": "^0.0.4",
     "jszip": "^3.10.1",
     "next": "^15.5.5",
     "pdf-lib": "^1.17.1",
