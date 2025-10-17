@@ -133,7 +133,7 @@ export default function HomePage() {
   // PDF Maker (Pro)
   const [pdfMakerImages, setPdfMakerImages] = useState([]);
   const [pdfMakerText, setPdfMakerText] = useState("");
-  const [pdfMakerSize, setPdfMakerSize] = useState("A4"); // A4 | Letter
+  const [pdfMakerSize, setPdfMakerSize] = useState("A4"); // A4 | Letter | Custom
   const [pdfMakerOrientation, setPdfMakerOrientation] = useState("portrait"); // portrait | landscape
   const [pdfMakerMargin, setPdfMakerMargin] = useState(36); // points
   const [pdfMakerBg, setPdfMakerBg] = useState("#000000"); // background color
@@ -141,6 +141,13 @@ export default function HomePage() {
   const [pdfMakerHeader, setPdfMakerHeader] = useState("");
   const [pdfMakerFooter, setPdfMakerFooter] = useState("");
   const [pdfMakerPageNumbers, setPdfMakerPageNumbers] = useState(true);
+  const [pdfMakerTemplate, setPdfMakerTemplate] = useState("clean"); // clean | branded
+  const [pdfMakerUnit, setPdfMakerUnit] = useState("pt"); // pt | mm | in
+  const [pdfMakerCustomW, setPdfMakerCustomW] = useState(210); // default A4 mm
+  const [pdfMakerCustomH, setPdfMakerCustomH] = useState(297);
+  const [pdfMakerImgRotate, setPdfMakerImgRotate] = useState(0);
+  const [pdfMakerShowCaptions, setPdfMakerShowCaptions] = useState(false);
+  const [pdfMakerShapes, setPdfMakerShapes] = useState(""); // lines/rectangles: one per line
   const [pdfMakerUrl, setPdfMakerUrl] = useState("");
 
   // Licensing
@@ -1119,8 +1126,22 @@ export default function HomePage() {
               <select value={pdfMakerSize} onChange={(e) => setPdfMakerSize(e.target.value)} style={{ marginLeft: "0.5rem" }}>
                 <option value="A4">A4</option>
                 <option value="Letter">Letter</option>
+                <option value="Custom">Custom</option>
               </select>
             </label></div>
+            {pdfMakerSize === "Custom" && (
+              <>
+                <div><label>Unit
+                  <select value={pdfMakerUnit} onChange={(e) => setPdfMakerUnit(e.target.value)} style={{ marginLeft: "0.5rem" }}>
+                    <option value="pt">pt</option>
+                    <option value="mm">mm</option>
+                    <option value="in">in</option>
+                  </select>
+                </label></div>
+                <div><label>Width <input type="number" value={pdfMakerCustomW} onChange={(e) => setPdfMakerCustomW(parseFloat(e.target.value || "0"))} /></label></div>
+                <div><label>Height <input type="number" value={pdfMakerCustomH} onChange={(e) => setPdfMakerCustomH(parseFloat(e.target.value || "0"))} /></label></div>
+              </>
+            )}
             <div><label>Orientation
               <select value={pdfMakerOrientation} onChange={(e) => setPdfMakerOrientation(e.target.value)} style={{ marginLeft: "0.5rem" }}>
                 <option value="portrait">Portrait</option>
@@ -1136,10 +1157,19 @@ export default function HomePage() {
                 <option value="stretch">Stretch</option>
               </select>
             </label></div>
+            <div><label>Image rotation (deg) <input type="number" value={pdfMakerImgRotate} onChange={(e) => setPdfMakerImgRotate(parseInt(e.target.value || "0", 10))} /></label></div>
+            <div><label><input type="checkbox" checked={pdfMakerShowCaptions} onChange={(e) => setPdfMakerShowCaptions(e.target.checked)} /> Show image captions</label></div>
             <div><label>Header text <input type="text" value={pdfMakerHeader} onChange={(e) => setPdfMakerHeader(e.target.value)} /></label></div>
             <div><label>Footer text <input type="text" value={pdfMakerFooter} onChange={(e) => setPdfMakerFooter(e.target.value)} /></label></div>
+            <div><label>Template
+              <select value={pdfMakerTemplate} onChange={(e) => setPdfMakerTemplate(e.target.value)} style={{ marginLeft: "0.5rem" }}>
+                <option value="clean">Clean</option>
+                <option value="branded">Branded</option>
+              </select>
+            </label></div>
             <div><label><input type="checkbox" checked={pdfMakerPageNumbers} onChange={(e) => setPdfMakerPageNumbers(e.target.checked)} /> Show page numbers</label></div>
           </div>
+          <textarea placeholder="Shapes (one per line): rect x y w h #RRGGBB | line x1 y1 x2 y2 #RRGGBB" rows={4} style={{ width: "100%", marginTop: "0.5rem" }} value={pdfMakerShapes} onChange={(e) => setPdfMakerShapes(e.target.value)} />
           <div className="actions">
             <button className="button" disabled={!licensed || processing || (!pdfMakerImages.length && !pdfMakerText.trim())} onClick={async () => {
               if (!licensed) { setError("Pro feature. DM us for a license."); return; }
@@ -1148,12 +1178,26 @@ export default function HomePage() {
                 setProcessing(true); setError(""); setStatus("Building PDF...");
                 const doc = await PDFDocument.create();
                 const font = await doc.embedStandardFont(StandardFonts.Helvetica);
+                const boldFont = await doc.embedStandardFont(StandardFonts.HelveticaBold);
+                const italicFont = await doc.embedStandardFont(StandardFonts.HelveticaOblique);
 
                 const sizes = {
                   A4: { w: 595, h: 842 },
                   Letter: { w: 612, h: 792 },
                 };
+
+                function toPt(value, unit) {
+                  if (unit === "pt") return value;
+                  if (unit === "mm") return (value * 72) / 25.4;
+                  if (unit === "in") return value * 72;
+                  return value;
+                }
+
                 let { w, h } = sizes[pdfMakerSize] || sizes.A4;
+                if (pdfMakerSize === "Custom") {
+                  w = toPt(pdfMakerCustomW || 210, pdfMakerUnit);
+                  h = toPt(pdfMakerCustomH || 297, pdfMakerUnit);
+                }
                 if (pdfMakerOrientation === "landscape") [w, h] = [h, w];
                 const margin = Math.max(0, parseInt(pdfMakerMargin || 0, 10));
                 const bg = (() => {
@@ -1164,16 +1208,40 @@ export default function HomePage() {
                   return rgb(r, g, b);
                 })();
 
+                function brandedTopBar(page) {
+                  page.drawRectangle({ x: 0, y: h - 24, width: w, height: 24, color: rgb(0.1, 0.3, 0.8) });
+                }
+
                 function drawHeaderFooter(page, pageIndex, totalPages) {
                   const header = pdfMakerHeader.trim();
                   const footer = pdfMakerFooter.trim();
-                  if (header) page.drawText(header, { x: margin, y: h - margin + -12, size: 10, font, color: rgb(1,1,1) });
+                  if (pdfMakerTemplate === "branded") brandedTopBar(page);
+                  if (header) page.drawText(header, { x: margin, y: h - margin + -12, size: 10, font: boldFont, color: rgb(1,1,1) });
                   let footerText = footer;
                   if (pdfMakerPageNumbers) {
                     const pn = `Page ${pageIndex + 1}/${totalPages}`;
                     footerText = footerText ? `${footerText} · ${pn}` : pn;
                   }
                   if (footerText) page.drawText(footerText, { x: margin, y: margin - 14, size: 10, font, color: rgb(1,1,1) });
+                }
+
+                function drawShapes(page) {
+                  const lines = pdfMakerShapes.replace(/\r/g, "").split("\n").map(s => s.trim()).filter(Boolean);
+                  for (const L of lines) {
+                    const parts = L.split(/\s+/);
+                    if (!parts.length) continue;
+                    if (parts[0] === "rect" && parts.length >= 6) {
+                      const [_, x, y, rw, rh, colorHex] = parts;
+                      const hex = (colorHex || "#ffffff").replace("#", "");
+                      const r = parseInt(hex.slice(0,2),16)/255, g = parseInt(hex.slice(2,4),16)/255, b = parseInt(hex.slice(4,6),16)/255;
+                      page.drawRectangle({ x: parseFloat(x), y: parseFloat(y), width: parseFloat(rw), height: parseFloat(rh), color: rgb(r,g,b) });
+                    } else if (parts[0] === "line" && parts.length >= 6) {
+                      const [_, x1, y1, x2, y2, colorHex] = parts;
+                      const hex = (colorHex || "#ffffff").replace("#", "");
+                      const r = parseInt(hex.slice(0,2),16)/255, g = parseInt(hex.slice(2,4),16)/255, b = parseInt(hex.slice(4,6),16)/255;
+                      page.drawLine({ start: { x: parseFloat(x1), y: parseFloat(y1) }, end: { x: parseFloat(x2), y: parseFloat(y2) }, thickness: 1, color: rgb(r,g,b) });
+                    }
+                  }
                 }
 
                 // Add image pages
@@ -1196,33 +1264,45 @@ export default function HomePage() {
                   const dw = iw * scale, dh = ih * scale;
                   const x = margin + (cw - dw) / 2;
                   const y = margin + (ch - dh) / 2;
-                  page.drawImage(img, { x, y, width: dw, height: dh });
+
+                  page.drawImage(img, { x, y, width: dw, height: dh, rotate: (pdfMakerImgRotate * Math.PI) / 180 });
+                  if (pdfMakerShowCaptions) {
+                    const base = file.name.replace(/\.[^.]+$/, "");
+                    page.drawText(base, { x: margin, y: margin + 4, size: 10, font: italicFont, color: rgb(1,1,1) });
+                  }
+                  drawShapes(page);
                   drawHeaderFooter(page, doc.getPageCount() - 1, 0); // total updated later
                 }
 
-                // Add text pages (simple wrapping)
+                // Add text pages with simple styling support (**bold**, *italic*, ::center::)
+                function drawStyledLine(page, text, x, y, size) {
+                  let t = text.trim();
+                  let f = font;
+                  let align = "left";
+                  if (t.startsWith("::center::")) { align = "center"; t = t.replace("::center::", "").trim(); }
+                  else if (t.startsWith("::right::")) { align = "right"; t = t.replace("::right::", "").trim(); }
+                  if (/^\*{2}.+\*{2}$/.test(t)) { f = boldFont; t = t.replace(/^\*{2}|\*{2}$/g, ""); }
+                  else if (/^\*.+\*$/.test(t)) { f = italicFont; t = t.replace(/^\*|\*$/g, ""); }
+                  let dx = x;
+                  if (align === "center") dx = (w / 2) - (t.length * size * 0.3);
+                  if (align === "right") dx = w - margin - (t.length * size * 0.6);
+                  page.drawText(t, { x: dx, y, size, font: f, color: rgb(1,1,1) });
+                }
+
                 if (pdfMakerText.trim()) {
                   const content = pdfMakerText.replace(/\r/g, "").split("\n");
                   const pageSize = 12;
                   const lineHeight = pageSize * 1.25;
-                  const cw = w - margin * 2;
-                  // crude chars per line estimate
-                  const charsPerLine = Math.max(10, Math.floor(cw / (pageSize * 0.6)));
-                  let bufferLines = [];
-                  for (const line of content) {
-                    if (!line) { bufferLines.push(""); continue; }
-                    for (let i = 0; i < line.length; i += charsPerLine) {
-                      bufferLines.push(line.slice(i, i + charsPerLine));
-                    }
-                  }
                   let page = null, y = 0;
-                  for (const L of bufferLines) {
+                  for (const L of content) {
+                    const line = L;
                     if (!page || y - lineHeight < margin) {
                       page = doc.addPage([w, h]);
                       page.drawRectangle({ x: 0, y: 0, width: w, height: h, color: bg });
                       y = h - margin;
+                      drawShapes(page);
                     }
-                    page.drawText(L, { x: margin, y: y - lineHeight, size: pageSize, font, color: rgb(1,1,1) });
+                    drawStyledLine(page, line, margin, y - lineHeight, pageSize);
                     y -= lineHeight;
                   }
                 }
