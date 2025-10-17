@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useEffect } from "react";
 import JSZip from "jszip";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 function TabButton({ active, onClick, children }) {
   return (
@@ -116,6 +116,19 @@ export default function HomePage() {
   const [pdfToolFiles, setPdfToolFiles] = useState([]);
   const [pdfAction, setPdfAction] = useState("split"); // split | rotate90 | rotate180 | rotate270
   const [pdfToolsZipUrl, setPdfToolsZipUrl] = useState("");
+
+  // PDF Editor (Pro)
+  const [pdfEditFile, setPdfEditFile] = useState(null);
+  const [pdfEditDelete, setPdfEditDelete] = useState(""); // e.g., 1-3,5
+  const [pdfEditOrder, setPdfEditOrder] = useState(""); // e.g., 3,1,2
+  const [pdfEditRotate, setPdfEditRotate] = useState("0"); // "0" | "90" | "180" | "270"
+  const [pdfEditRotateRanges, setPdfEditRotateRanges] = useState(""); // e.g., 2-4
+  const [pdfEditWatermark, setPdfEditWatermark] = useState(""); // text
+  const [pdfEditWmOpacity, setPdfEditWmOpacity] = useState(0.3);
+  const [pdfEditWmSize, setPdfEditWmSize] = useState(18);
+  const [pdfEditWmPos, setPdfEditWmPos] = useState("bottom-right"); // bottom-right | bottom-left | top-right | top-left
+  const [pdfEditAppendCount, setPdfEditAppendCount] = useState(0);
+  const [pdfEditUrl, setPdfEditUrl] = useState("");
 
   // Licensing
   const [licenseKey, setLicenseKey] = useState("");
@@ -651,6 +664,7 @@ export default function HomePage() {
       case "heic": return "HEIC to JPG/PNG (Pro)";
       case "imagepro": return "Image Resize & Watermark (Pro)";
       case "pdftools": return "PDF Tools (Pro)";
+      case "pdfeditor": return "PDF Editor (Pro)";
       case "ocr": return "OCR (Free)";
       case "qr": return "QR Generator (Free)";
       case "short": return "URL Shortener (Free)";
@@ -676,6 +690,7 @@ export default function HomePage() {
         <TabButton active={tab === "heic"} onClick={() => setTab("heic")}>HEIC to JPG/PNG (Pro)</TabButton>
         <TabButton active={tab === "imagepro"} onClick={() => setTab("imagepro")}>Image Resize & Watermark (Pro)</TabButton>
         <TabButton active={tab === "pdftools"} onClick={() => setTab("pdftools")}>PDF Tools (Pro)</TabButton>
+        <TabButton active={tab === "pdfeditor"} onClick={() => setTab("pdfeditor")}>PDF Editor (Pro)</TabButton>
         <TabButton active={tab === "ocr"} onClick={() => setTab("ocr")}>OCR (Free)</TabButton>
         <TabButton active={tab === "qr"} onClick={() => setTab("qr")}>QR Generator (Free)</TabButton>
         <TabButton active={tab === "short"} onClick={() => setTab("short")}>URL Shortener (Free)</TabButton>
@@ -919,6 +934,154 @@ export default function HomePage() {
             {pdfToolsZipUrl && (
               <a className="button primary" href={pdfToolsZipUrl} download="pdf_tools.zip">Download Output</a>
             )}
+          </div>
+          {!licensed && <div className="hint">Pro only. Get a license via Telegram.</div>}
+        </div>
+      )}
+
+      {tab === "pdfeditor" && (
+        <div className="card">
+          <label className="label" htmlFor="pdfEditInput">PDF Editor (Pro)</label>
+          <p className="hint">Upload one PDF and apply edits: delete pages, reorder, rotate, watermark, append blank pages.</p>
+          <input id="pdfEditInput" type="file" accept="application/pdf" onChange={(e) => {
+            if (!licensed) { setError("Pro feature. DM us for a license."); setPdfEditFile(null); return; }
+            const f = e.target.files?.[0] || null;
+            setPdfEditFile(f);
+            setPdfEditUrl("");
+            setError(f ? "" : "Please select a PDF.");
+          }} />
+          <div className="options" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "0.75rem" }}>
+            <div><label>Delete pages <input type="text" placeholder="e.g., 1-3,5" value={pdfEditDelete} onChange={(e) => setPdfEditDelete(e.target.value)} /></label></div>
+            <div><label>Reorder (list) <input type="text" placeholder="e.g., 3,1,2" value={pdfEditOrder} onChange={(e) => setPdfEditOrder(e.target.value)} /></label></div>
+            <div><label>Rotate
+              <select value={pdfEditRotate} onChange={(e) => setPdfEditRotate(e.target.value)} style={{ marginLeft: "0.5rem" }}>
+                <option value="0">0°</option>
+                <option value="90">90°</option>
+                <option value="180">180°</option>
+                <option value="270">270°</option>
+              </select>
+            </label></div>
+            <div><label>Rotate pages <input type="text" placeholder="e.g., 2-4" value={pdfEditRotateRanges} onChange={(e) => setPdfEditRotateRanges(e.target.value)} /></label></div>
+            <div><label>Watermark text <input type="text" placeholder="Optional" value={pdfEditWatermark} onChange={(e) => setPdfEditWatermark(e.target.value)} /></label></div>
+            <div><label>WM opacity <input type="range" min="0" max="1" step="0.05" value={pdfEditWmOpacity} onChange={(e) => setPdfEditWmOpacity(parseFloat(e.target.value))} /></label></div>
+            <div><label>WM size <input type="number" value={pdfEditWmSize} onChange={(e) => setPdfEditWmSize(parseInt(e.target.value || "0", 10))} /></label></div>
+            <div><label>WM position
+              <select value={pdfEditWmPos} onChange={(e) => setPdfEditWmPos(e.target.value)} style={{ marginLeft: "0.5rem" }}>
+                <option value="bottom-right">Bottom-right</option>
+                <option value="bottom-left">Bottom-left</option>
+                <option value="top-right">Top-right</option>
+                <option value="top-left">Top-left</option>
+              </select>
+            </label></div>
+            <div><label>Append blank pages <input type="number" value={pdfEditAppendCount} onChange={(e) => setPdfEditAppendCount(parseInt(e.target.value || "0", 10))} /></label></div>
+          </div>
+          <div className="actions">
+            <button className="button" disabled={!licensed || !pdfEditFile || processing} onClick={async () => {
+              if (!pdfEditFile) { setError("Select a PDF."); return; }
+              try {
+                setProcessing(true); setError(""); setStatus("Editing PDF...");
+                const ab = await pdfEditFile.arrayBuffer();
+                let doc = await PDFDocument.load(ab);
+
+                const max = doc.getPageCount();
+
+                function parseRanges(str) {
+                  const out = new Set();
+                  const s = (str || "").trim();
+                  if (!s) return Array.from(out);
+                  for (const part of s.split(",").map(p => p.trim()).filter(Boolean)) {
+                    const m = part.match(/^([0-9]+)(?:-([0-9]+))?$/);
+                    if (!m) continue;
+                    let a = parseInt(m[1], 10), b = m[2] ? parseInt(m[2], 10) : a;
+                    if (isNaN(a) || isNaN(b)) continue;
+                    a = Math.max(1, Math.min(max, a));
+                    b = Math.max(1, Math.min(max, b));
+                    const [start, end] = a <= b ? [a, b] : [b, a];
+                    for (let i = start; i <= end; i++) out.add(i - 1); // zero-based
+                  }
+                  return Array.from(out).sort((x, y) => x - y);
+                }
+
+                // 1) Delete pages
+                const delIdx = parseRanges(pdfEditDelete);
+                if (delIdx.length) {
+                  const keep = [];
+                  for (let i = 0; i < doc.getPageCount(); i++) {
+                    if (!delIdx.includes(i)) keep.push(i);
+                  }
+                  const newDoc = await PDFDocument.create();
+                  const copied = await newDoc.copyPages(doc, keep);
+                  copied.forEach(p => newDoc.addPage(p));
+                  doc = newDoc;
+                }
+
+                // 2) Reorder pages
+                if (pdfEditOrder.trim()) {
+                  const order = pdfEditOrder.split(",").map(x => parseInt(x.trim(), 10)).filter(n => !isNaN(n));
+                  const validOrder = order.map(n => Math.max(1, Math.min(doc.getPageCount(), n))).map(n => n - 1);
+                  const newDoc = await PDFDocument.create();
+                  const copied = await newDoc.copyPages(doc, validOrder);
+                  copied.forEach(p => newDoc.addPage(p));
+                  doc = newDoc;
+                }
+
+                // 3) Rotate selected pages
+                const angle = parseInt(pdfEditRotate, 10) || 0;
+                const rotateIdx = parseRanges(pdfEditRotateRanges);
+                if (angle && rotateIdx.length) {
+                  for (const i of rotateIdx) {
+                    const p = doc.getPage(i);
+                    p.setRotation((angle * Math.PI) / 180);
+                  }
+                }
+
+                // 4) Append blank pages
+                const append = Math.max(0, parseInt(pdfEditAppendCount || 0, 10));
+                if (append > 0) {
+                  const first = doc.getPage(0);
+                  const { width, height } = first.getSize();
+                  for (let i = 0; i < append; i++) {
+                    const page = doc.addPage([width, height]);
+                    // leave blank
+                  }
+                }
+
+                // 5) Watermark text
+                if (pdfEditWatermark.trim()) {
+                  const font = await doc.embedStandardFont(StandardFonts.Helvetica);
+                  for (let i = 0; i < doc.getPageCount(); i++) {
+                    const p = doc.getPage(i);
+                    const { width, height } = p.getSize();
+                    const padding = 12;
+                    let x = padding, y = height - padding;
+                    if (pdfEditWmPos === "bottom-right") { x = width - padding; y = padding; }
+                    else if (pdfEditWmPos === "bottom-left") { x = padding; y = padding; }
+                    else if (pdfEditWmPos === "top-right") { x = width - padding; y = height - padding; }
+                    else if (pdfEditWmPos === "top-left") { x = padding; y = height - padding; }
+                    p.drawText(pdfEditWatermark, {
+                      x, y,
+                      size: Math.max(6, pdfEditWmSize),
+                      font,
+                      color: rgb(1, 1, 1),
+                      opacity: Math.min(1, Math.max(0, pdfEditWmOpacity)),
+                    });
+                  }
+                }
+
+                const outBytes = await doc.save();
+                const blob = new Blob([outBytes], { type: "application/pdf" });
+                const url = URL.createObjectURL(blob);
+                setPdfEditUrl(url);
+                setStatus("Ready.");
+              } catch (err) {
+                console.error(err); setError("Failed to edit PDF.");
+              } finally {
+                setProcessing(false);
+              }
+            }}>
+              {processing ? "Processing..." : "Apply & Download"}
+            </button>
+            {pdfEditUrl && <a className="button primary" href={pdfEditUrl} download="edited.pdf">Download Edited PDF</a>}
           </div>
           {!licensed && <div className="hint">Pro only. Get a license via Telegram.</div>}
         </div>
