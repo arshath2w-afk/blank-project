@@ -130,6 +130,19 @@ export default function HomePage() {
   const [pdfEditAppendCount, setPdfEditAppendCount] = useState(0);
   const [pdfEditUrl, setPdfEditUrl] = useState("");
 
+  // PDF Maker (Pro)
+  const [pdfMakerImages, setPdfMakerImages] = useState([]);
+  const [pdfMakerText, setPdfMakerText] = useState("");
+  const [pdfMakerSize, setPdfMakerSize] = useState("A4"); // A4 | Letter
+  const [pdfMakerOrientation, setPdfMakerOrientation] = useState("portrait"); // portrait | landscape
+  const [pdfMakerMargin, setPdfMakerMargin] = useState(36); // points
+  const [pdfMakerBg, setPdfMakerBg] = useState("#000000"); // background color
+  const [pdfMakerFit, setPdfMakerFit] = useState("contain"); // contain | cover | stretch
+  const [pdfMakerHeader, setPdfMakerHeader] = useState("");
+  const [pdfMakerFooter, setPdfMakerFooter] = useState("");
+  const [pdfMakerPageNumbers, setPdfMakerPageNumbers] = useState(true);
+  const [pdfMakerUrl, setPdfMakerUrl] = useState("");
+
   // Licensing
   const [licenseKey, setLicenseKey] = useState("");
   const [licensed, setLicensed] = useState(false);
@@ -665,6 +678,7 @@ export default function HomePage() {
       case "imagepro": return "Image Resize & Watermark (Pro)";
       case "pdftools": return "PDF Tools (Pro)";
       case "pdfeditor": return "PDF Editor (Pro)";
+      case "pdfmaker": return "PDF Maker (Pro)";
       case "ocr": return "OCR (Free)";
       case "qr": return "QR Generator (Free)";
       case "short": return "URL Shortener (Free)";
@@ -691,6 +705,7 @@ export default function HomePage() {
         <TabButton active={tab === "imagepro"} onClick={() => setTab("imagepro")}>Image Resize & Watermark (Pro)</TabButton>
         <TabButton active={tab === "pdftools"} onClick={() => setTab("pdftools")}>PDF Tools (Pro)</TabButton>
         <TabButton active={tab === "pdfeditor"} onClick={() => setTab("pdfeditor")}>PDF Editor (Pro)</TabButton>
+        <TabButton active={tab === "pdfmaker"} onClick={() => setTab("pdfmaker")}>PDF Maker (Pro)</TabButton>
         <TabButton active={tab === "ocr"} onClick={() => setTab("ocr")}>OCR (Free)</TabButton>
         <TabButton active={tab === "qr"} onClick={() => setTab("qr")}>QR Generator (Free)</TabButton>
         <TabButton active={tab === "short"} onClick={() => setTab("short")}>URL Shortener (Free)</TabButton>
@@ -1082,6 +1097,157 @@ export default function HomePage() {
               {processing ? "Processing..." : "Apply & Download"}
             </button>
             {pdfEditUrl && <a className="button primary" href={pdfEditUrl} download="edited.pdf">Download Edited PDF</a>}
+          </div>
+          {!licensed && <div className="hint">Pro only. Get a license via Telegram.</div>}
+        </div>
+      )}
+
+      {tab === "pdfmaker" && (
+        <div className="card">
+          <label className="label" htmlFor="pdfMakerInput">PDF Maker (Pro)</label>
+          <p className="hint">Create a new PDF from images and text. Choose page size, margins, fit, header/footer, background, and page numbers.</p>
+          <input id="pdfMakerInput" type="file" accept="image/*" multiple onChange={(e) => {
+            if (!licensed) { setError("Pro feature. DM us for a license."); setPdfMakerImages([]); return; }
+            const selected = Array.from(e.target.files || []).filter(f => f.type.startsWith("image/"));
+            setPdfMakerImages(selected);
+            setError(selected.length ? "" : "Please select images.");
+            if (pdfMakerUrl) { URL.revokeObjectURL(pdfMakerUrl); setPdfMakerUrl(""); }
+          }} />
+          <textarea placeholder="Optional text content (added after images or standalone)" rows={6} style={{ width: "100%", marginTop: "0.5rem" }} value={pdfMakerText} onChange={(e) => setPdfMakerText(e.target.value)} />
+          <div className="options" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: "0.75rem" }}>
+            <div><label>Page size
+              <select value={pdfMakerSize} onChange={(e) => setPdfMakerSize(e.target.value)} style={{ marginLeft: "0.5rem" }}>
+                <option value="A4">A4</option>
+                <option value="Letter">Letter</option>
+              </select>
+            </label></div>
+            <div><label>Orientation
+              <select value={pdfMakerOrientation} onChange={(e) => setPdfMakerOrientation(e.target.value)} style={{ marginLeft: "0.5rem" }}>
+                <option value="portrait">Portrait</option>
+                <option value="landscape">Landscape</option>
+              </select>
+            </label></div>
+            <div><label>Margin (pt) <input type="number" value={pdfMakerMargin} onChange={(e) => setPdfMakerMargin(parseInt(e.target.value || "0", 10))} /></label></div>
+            <div><label>Background <input type="color" value={pdfMakerBg} onChange={(e) => setPdfMakerBg(e.target.value)} /></label></div>
+            <div><label>Image fit
+              <select value={pdfMakerFit} onChange={(e) => setPdfMakerFit(e.target.value)} style={{ marginLeft: "0.5rem" }}>
+                <option value="contain">Contain</option>
+                <option value="cover">Cover</option>
+                <option value="stretch">Stretch</option>
+              </select>
+            </label></div>
+            <div><label>Header text <input type="text" value={pdfMakerHeader} onChange={(e) => setPdfMakerHeader(e.target.value)} /></label></div>
+            <div><label>Footer text <input type="text" value={pdfMakerFooter} onChange={(e) => setPdfMakerFooter(e.target.value)} /></label></div>
+            <div><label><input type="checkbox" checked={pdfMakerPageNumbers} onChange={(e) => setPdfMakerPageNumbers(e.target.checked)} /> Show page numbers</label></div>
+          </div>
+          <div className="actions">
+            <button className="button" disabled={!licensed || processing || (!pdfMakerImages.length && !pdfMakerText.trim())} onClick={async () => {
+              if (!licensed) { setError("Pro feature. DM us for a license."); return; }
+              if (!pdfMakerImages.length && !pdfMakerText.trim()) { setError("Add images or text."); return; }
+              try {
+                setProcessing(true); setError(""); setStatus("Building PDF...");
+                const doc = await PDFDocument.create();
+                const font = await doc.embedStandardFont(StandardFonts.Helvetica);
+
+                const sizes = {
+                  A4: { w: 595, h: 842 },
+                  Letter: { w: 612, h: 792 },
+                };
+                let { w, h } = sizes[pdfMakerSize] || sizes.A4;
+                if (pdfMakerOrientation === "landscape") [w, h] = [h, w];
+                const margin = Math.max(0, parseInt(pdfMakerMargin || 0, 10));
+                const bg = (() => {
+                  const hex = pdfMakerBg.replace("#", "");
+                  const r = parseInt(hex.slice(0, 2), 16) / 255;
+                  const g = parseInt(hex.slice(2, 4), 16) / 255;
+                  const b = parseInt(hex.slice(4, 6), 16) / 255;
+                  return rgb(r, g, b);
+                })();
+
+                function drawHeaderFooter(page, pageIndex, totalPages) {
+                  const header = pdfMakerHeader.trim();
+                  const footer = pdfMakerFooter.trim();
+                  if (header) page.drawText(header, { x: margin, y: h - margin + -12, size: 10, font, color: rgb(1,1,1) });
+                  let footerText = footer;
+                  if (pdfMakerPageNumbers) {
+                    const pn = `Page ${pageIndex + 1}/${totalPages}`;
+                    footerText = footerText ? `${footerText} · ${pn}` : pn;
+                  }
+                  if (footerText) page.drawText(footerText, { x: margin, y: margin - 14, size: 10, font, color: rgb(1,1,1) });
+                }
+
+                // Add image pages
+                for (const file of pdfMakerImages) {
+                  const ab = await file.arrayBuffer();
+                  const isPng = file.type.includes("png");
+                  const img = isPng ? await doc.embedPng(ab) : await doc.embedJpg(ab);
+                  const page = doc.addPage([w, h]);
+                  page.drawRectangle({ x: 0, y: 0, width: w, height: h, color: bg });
+
+                  const cw = w - margin * 2;
+                  const ch = h - margin * 2;
+
+                  let iw = img.width, ih = img.height;
+                  let sx = cw / iw, sy = ch / ih;
+                  let scale;
+                  if (pdfMakerFit === "contain") scale = Math.min(sx, sy);
+                  else if (pdfMakerFit === "cover") scale = Math.max(sx, sy);
+                  else scale = 1; // stretch
+                  const dw = iw * scale, dh = ih * scale;
+                  const x = margin + (cw - dw) / 2;
+                  const y = margin + (ch - dh) / 2;
+                  page.drawImage(img, { x, y, width: dw, height: dh });
+                  drawHeaderFooter(page, doc.getPageCount() - 1, 0); // total updated later
+                }
+
+                // Add text pages (simple wrapping)
+                if (pdfMakerText.trim()) {
+                  const content = pdfMakerText.replace(/\r/g, "").split("\n");
+                  const pageSize = 12;
+                  const lineHeight = pageSize * 1.25;
+                  const cw = w - margin * 2;
+                  // crude chars per line estimate
+                  const charsPerLine = Math.max(10, Math.floor(cw / (pageSize * 0.6)));
+                  let bufferLines = [];
+                  for (const line of content) {
+                    if (!line) { bufferLines.push(""); continue; }
+                    for (let i = 0; i < line.length; i += charsPerLine) {
+                      bufferLines.push(line.slice(i, i + charsPerLine));
+                    }
+                  }
+                  let page = null, y = 0;
+                  for (const L of bufferLines) {
+                    if (!page || y - lineHeight < margin) {
+                      page = doc.addPage([w, h]);
+                      page.drawRectangle({ x: 0, y: 0, width: w, height: h, color: bg });
+                      y = h - margin;
+                    }
+                    page.drawText(L, { x: margin, y: y - lineHeight, size: pageSize, font, color: rgb(1,1,1) });
+                    y -= lineHeight;
+                  }
+                }
+
+                // Update header/footer with proper total page count
+                const total = doc.getPageCount();
+                for (let i = 0; i < total; i++) {
+                  const page = doc.getPage(i);
+                  drawHeaderFooter(page, i, total);
+                }
+
+                const outBytes = await doc.save();
+                const blob = new Blob([outBytes], { type: "application/pdf" });
+                const url = URL.createObjectURL(blob);
+                setPdfMakerUrl(url);
+                setStatus("Ready.");
+              } catch (err) {
+                console.error(err); setError("Failed to make PDF.");
+              } finally {
+                setProcessing(false);
+              }
+            }}>
+              {processing ? "Processing..." : "Make PDF"}
+            </button>
+            {pdfMakerUrl && <a className="button primary" href={pdfMakerUrl} download="made.pdf">Download PDF</a>}
           </div>
           {!licensed && <div className="hint">Pro only. Get a license via Telegram.</div>}
         </div>
