@@ -668,8 +668,9 @@ export default function HomePage() {
         <TabButton active={tab === "heic"} onClick={() => setTab("heic")}>HEIC to JPG/PNG (Pro)</TabButton>
         <TabButton active={tab === "imagepro"} onClick={() => setTab("imagepro")}>Image Resize & Watermark (Pro)</TabButton>
         <TabButton active={tab === "pdftools"} onClick={() => setTab("pdftools")}>PDF Tools (Pro)</TabButton>
-        <TabButton active={tab === "ocr"} onClick={() => setTab("ocr")}>OCR (Free API)</TabButton>
+        <TabButton active={tab === "ocr"} onClick={() => setTab("ocr")}>OCR (Free)</TabButton>
         <TabButton active={tab === "qr"} onClick={() => setTab("qr")}>QR Generator (Free)</TabButton>
+        <TabButton active={tab === "short"} onClick={() => setTab("short")}>URL Shortener (Free)</TabButton>
       </div>
 
       <h2 style={{ marginTop: 0 }}>{tabTitle}</h2>
@@ -879,15 +880,24 @@ export default function HomePage() {
               setPdfToolsZipUrl("");
             }
           }} />
-          <div className="options" style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-            <label>Action:
-              <select value={pdfAction} onChange={(e) => setPdfAction(e.target.value)} style={{ marginLeft: "0.5rem" }}>
-                <option value="split">Split pages</option>
-                <option value="rotate90">Rotate 90°</option>
-                <option value="rotate180">Rotate 180°</option>
-                <option value="rotate270">Rotate 270°</option>
-              </select>
-            </label>
+          <div className="options" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: "0.75rem" }}>
+            <div>
+              <label>Action:
+                <select value={pdfAction} onChange={(e) => setPdfAction(e.target.value)} style={{ marginLeft: "0.5rem" }}>
+                  <option value="split">Split pages</option>
+                  <option value="rotate90">Rotate 90°</option>
+                  <option value="rotate180">Rotate 180°</option>
+                  <option value="rotate270">Rotate 270°</option>
+                  <option value="clearMeta">Clear metadata</option>
+                  <option value="addBlank">Append blank page</option>
+                </select>
+              </label>
+            </div>
+            <div>
+              <label>Page ranges (for split)
+                <input type="text" placeholder="e.g., 1-3,5" onChange={(e) => window.__pdfRanges = e.target.value} />
+              </label>
+            </div>
           </div>
           <div className="actions">
             <button className="button" disabled={!licensed || !pdfToolFiles.length || processing} onClick={runPdfTools}>
@@ -903,7 +913,8 @@ export default function HomePage() {
 
       {tab === "ocr" && (
         <div className="card">
-          <label className="label" htmlFor="ocrInput">OCR (Free API) - Image or URL</label>
+          <label className="label" htmlFor="ocrInput">OCR (Free)</label>
+          <p className="hint">Extract text from images or PDFs. Upload a file or supply a URL.</p>
           <input id="ocrInput" type="file" accept="image/*,application/pdf" onChange={async (e) => {
             const file = e.target.files?.[0];
             setError("");
@@ -911,7 +922,7 @@ export default function HomePage() {
             if (!file) { setError("Please select a file."); return; }
             try {
               setProcessing(true);
-              setStatus("Uploading to OCR...");
+              setStatus("Sending to OCR...");
               const ab = await file.arrayBuffer();
               const base64 = `data:${file.type};base64,${btoa(String.fromCharCode(...new Uint8Array(ab)))}`;
               const res = await fetch("/api/ocr", {
@@ -924,12 +935,11 @@ export default function HomePage() {
               const blob = new Blob([json.text || ""], { type: "text/plain" });
               const url = URL.createObjectURL(blob);
               setStatus("OCR complete.");
-              setImagesZipUrl(""); // avoid mixing download buttons
+              setImagesZipUrl("");
               setPdfDownloadUrl("");
               setHeicZipUrl("");
               setWmZipUrl("");
               setPdfToolsZipUrl("");
-              // temporarily reuse imagesZipUrl slot for OCR text download
               setImagesZipUrl(url);
             } catch (err) {
               console.error(err);
@@ -938,18 +948,47 @@ export default function HomePage() {
               setProcessing(false);
             }
           }} />
+          <div className="options" style={{ marginTop: "0.75rem" }}>
+            <label>OR enter URL:
+              <input type="text" placeholder="https://example.com/image.jpg" onChange={async (e) => {
+                const urlInput = e.target.value.trim();
+                if (!urlInput) return;
+                setError(""); setStatus("");
+                try {
+                  setProcessing(true);
+                  setStatus("Sending to OCR...");
+                  const res = await fetch("/api/ocr", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ url: urlInput }),
+                  });
+                  const json = await res.json();
+                  if (!json.ok) { setError("OCR failed."); setProcessing(false); return; }
+                  const blob = new Blob([json.text || ""], { type: "text/plain" });
+                  const url = URL.createObjectURL(blob);
+                  setStatus("OCR complete.");
+                  setImagesZipUrl(url);
+                } catch (err) {
+                  console.error(err);
+                  setError("OCR error.");
+                } finally {
+                  setProcessing(false);
+                }
+              }} />
+            </label>
+          </div>
           <div className="actions">
             {imagesZipUrl && (
               <a className="button primary" href={imagesZipUrl} download="ocr.txt">Download OCR Text</a>
             )}
           </div>
-          <div className="hint">Powered by OCR.space free API. Set OCR_SPACE_API_KEY for production.</div>
         </div>
       )}
 
       {tab === "qr" && (
         <div className="card">
           <label className="label" htmlFor="qrText">QR Generator (Free)</label>
+          <p className="hint">Create a QR image from any text or URL.</p>
           <input id="qrText" type="text" placeholder="Enter text/URL" onChange={async (e) => {
             const text = e.target.value;
             setError("");
@@ -957,7 +996,7 @@ export default function HomePage() {
             if (!text) return;
             try {
               setProcessing(true);
-              setStatus("Generating QR...");
+              setStatus("Generating...");
               const apiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(text)}`;
               const resp = await fetch(apiUrl);
               const blob = await resp.blob();
@@ -980,7 +1019,43 @@ export default function HomePage() {
               <a className="button primary" href={imagesZipUrl} download="qr.png">Download QR</a>
             )}
           </div>
-          <div className="hint">Powered by api.qrserver.com free service.</div>
+        </div>
+      )}
+
+      {tab === "short" && (
+        <div className="card">
+          <label className="label" htmlFor="shortUrl">URL Shortener (Free)</label>
+          <p className="hint">Create a short link from a long URL.</p>
+          <div className="actions" style={{ flexDirection: "column", alignItems: "stretch" }}>
+            <input id="shortUrl" type="text" placeholder="Paste a long URL here" />
+            <button className="button" type="button" onClick={async () => {
+              const el = document.getElementById("shortUrl");
+              const long = el?.value?.trim();
+              if (!long) { setError("Please enter a URL."); return; }
+              setError(""); setStatus("Shortening...");
+              try {
+                const res = await fetch("/api/shorten", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ url: long }),
+                });
+                const json = await res.json();
+                if (!json.ok) { setError("Failed to shorten URL."); return; }
+                setStatus("Short URL created.");
+                const blob = new Blob([json.short], { type: "text/plain" });
+                const url = URL.createObjectURL(blob);
+                setImagesZipUrl(url);
+              } catch (err) {
+                console.error(err);
+                setError("Shortener error.");
+              }
+            }}>Shorten</button>
+          </div>
+          <div className="actions">
+            {imagesZipUrl && (
+              <a className="button primary" href={imagesZipUrl} download="short_url.txt">Download Short URL</a>
+            )}
+          </div>
         </div>
       )}
 
