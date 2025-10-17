@@ -69,7 +69,7 @@ function AuthBox({ userEmail, setUserEmail, setAuthStatus }) {
 }
 
 export default function HomePage() {
-  const [tab, setTab] = useState("unzip"); // unzip | zip | image | pdf | heic | imagepro | pdftools | ocr | qr
+  const [tab, setTab] = useState("unzip"); // unzip | zip | image | pdf | heic | imagepro | pdftools | ocr | qr | meta | checksums | diff | ziprename | zipsplit
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
@@ -651,6 +651,14 @@ export default function HomePage() {
       case "heic": return "HEIC to JPG/PNG (Pro)";
       case "imagepro": return "Image Resize & Watermark (Pro)";
       case "pdftools": return "PDF Tools (Pro)";
+      case "ocr": return "OCR (Free)";
+      case "qr": return "QR Generator (Free)";
+      case "short": return "URL Shortener (Free)";
+      case "meta": return "Strip Image Metadata (Free)";
+      case "checksums": return "File Checksums (Free)";
+      case "diff": return "Text Diff (Free)";
+      case "ziprename": return "ZIP Batch Rename (Free)";
+      case "zipsplit": return "Split ZIP by Size (Free)";
       default: return "Tools";
     }
   }, [tab]);
@@ -671,6 +679,11 @@ export default function HomePage() {
         <TabButton active={tab === "ocr"} onClick={() => setTab("ocr")}>OCR (Free)</TabButton>
         <TabButton active={tab === "qr"} onClick={() => setTab("qr")}>QR Generator (Free)</TabButton>
         <TabButton active={tab === "short"} onClick={() => setTab("short")}>URL Shortener (Free)</TabButton>
+        <TabButton active={tab === "meta"} onClick={() => setTab("meta")}>Strip Image Metadata (Free)</TabButton>
+        <TabButton active={tab === "checksums"} onClick={() => setTab("checksums")}>File Checksums (Free)</TabButton>
+        <TabButton active={tab === "diff"} onClick={() => setTab("diff")}>Text Diff (Free)</TabButton>
+        <TabButton active={tab === "ziprename"} onClick={() => setTab("ziprename")}>ZIP Batch Rename (Free)</TabButton>
+        <TabButton active={tab === "zipsplit"} onClick={() => setTab("zipsplit")}>Split ZIP by Size (Free)</TabButton>
       </div>
 
       <h2 style={{ marginTop: 0 }}>{tabTitle}</h2>
@@ -1023,12 +1036,12 @@ export default function HomePage() {
       )}
 
       {tab === "short" && (
-        <div className="card">
-          <label className="label" htmlFor="shortUrl">URL Shortener (Free)</label>
-          <p className="hint">Create a short link from a long URL.</p>
-          <div className="actions" style={{ flexDirection: "column", alignItems: "stretch" }}>
-            <input id="shortUrl" type="text" placeholder="Paste a long URL here" />
-            <button className="button" type="button" onClick={async () => {
+       <<div className="card">
+         <<label className="label" htmlFor="shortUrl">URL Shortener (Fr)</</label>
+         <<p className="hint">Create a short link from a long U.</</p>
+         <<div className="actions" style={{ flexDirection: "column", alignItems: "stretch" }}>
+           <<input id="shortUrl" type="text" placeholder="Paste a long URL here" />
+           <<button className="button" type="button" onClick={async () => {
               const el = document.getElementById("shortUrl");
               const long = el?.value?.trim();
               if (!long) { setError("Please enter a URL."); return; }
@@ -1049,15 +1062,171 @@ export default function HomePage() {
                 console.error(err);
                 setError("Shortener error.");
               }
-            }}>Shorten</button>
-          </div>
-          <div className="actions">
+            }}>Short</</button>
+        </</div>
+         <<div className="actions">
             {imagesZipUrl && (
-              <a className="button primary" href={imagesZipUrl} download="short_url.txt">Download Short URL</a>
+             <<a className="button primary" href={imagesZipUrl} download="short_url.txt">Download Short U</</a>
             )}
-          </div>
-        </div>
+        </</div>
+      </</div>
       )}
+
+      {tab === "meta" && (
+       < div className="card">
+         < label className="label" htmlFor="metaInput">Strip Image Metadata (Fr)</eelabel>
+         < p className="hint">Re-encode images to remove EXIF/metadata. Outputs a ZIP of cleaned imag.</esp>
+         < input id="metaInput" type="file" accept="image/*" multiple onChange={(e) => {
+            const selected = Array.from(e.target.files || []).filter((f) => f.type.startsWith("image/"));
+            setImageFiles(selected);
+            setError(selected.length ? "" : "Please select images.");
+            if (imagesZipUrl) { URL.revokeObjectURL(imagesZipUrl); setImagesZipUrl(""); }
+          }} />
+         < div className="actions">
+           < button className="button" disabled={!imageFiles.length || processing} onClick={async () => {
+              if (!imageFiles.length) { setError("Select images."); return; }
+              try {
+                setProcessing(true);
+                setError(""); setStatus("Stripping metadata...");
+                const zip = new JSZip();
+                setProgress({ current: 0, total: imageFiles.length, stage: "Processing" });
+                let count = 0;
+                for (const file of imageFiles) {
+                  const bmp = await createImageBitmap(file);
+                  const canvas = document.createElement("canvas");
+                  canvas.width = bmp.width; canvas.height = bmp.height;
+                  const ctx = canvas.getContext("2d"); ctx.drawImage(bmp, 0, 0);
+                  const outBlob = await new Promise((resolve) =>
+                    canvas.toBlob(resolve, "image/jpeg", 0.92)
+                  );
+                  const baseName = file.name.replace(/\.[^.]+$/, "");
+                  const buf = await outBlob.arrayBuffer();
+                  zip.file(`${baseName}.jpg`, buf);
+                  count++; setProgress({ current: count, total: imageFiles.length, stage: "Processing" });
+                  await new Promise((r) => setTimeout(r, 0));
+                }
+                setStatus("Packaging...");
+                const outBlob = await zip.generateAsync({ type: "blob" });
+                const url = URL.createObjectURL(outBlob);
+                setImagesZipUrl(url);
+                setStatus("Ready.");
+              } catch (err) {
+                console.error(err); setError("Failed to strip metadata.");
+              } finally {
+                setProcessing(false);
+              }
+            }}>
+              {processing ? "Processing..." : "Strip & Download"}
+          </  button>
+            {imagesZipUrl && (
+             < a className="button primary" href={imagesZipUrl} download="images_clean.zip">Download Clean Imag</esa>
+            )}
+        </  div>
+      </  div>
+      )}
+
+      {tab === "checksums" && (
+       < div className="card">
+         < label className="label" htmlFor="checksumInput">File Checksums (Fr)</eelabel>
+         < p className="hint">Generate SHA‑256 checksums for selected fil.</esp>
+         < input id="checksumInput" type="file" multiple onChange={(e) => {
+            const selected = Array.from(e.target.files || []);
+            setFolderFiles(selected);
+            setError(selected.length ? "" : "Please select files.");
+            if (imagesZipUrl) { URL.revokeObjectURL(imagesZipUrl); setImagesZipUrl(""); }
+          }} />
+         < div className="actions">
+           < button className="button" disabled={!folderFiles.length || processing} onClick={async () => {
+              try {
+                setProcessing(true); setError(""); setStatus("Hashing...");
+                const lines = [];
+                setProgress({ current: 0, total: folderFiles.length, stage: "Hashing" });
+                let count = 0;
+                for (const f of folderFiles) {
+                  const ab = await f.arrayBuffer();
+                  const hashBuf = await crypto.subtle.digest("SHA-256", ab);
+                  const hashHex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, "0")).join("");
+                  lines.push(`${hashHex}  ${f.name}`);
+                  count++; setProgress({ current: count, total: folderFiles.length, stage: "Hashing" });
+                  await new Promise((r) => setTimeout(r, 0));
+                }
+                const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+                const url = URL.createObjectURL(blob);
+                setImagesZipUrl(url);
+                setStatus("Ready.");
+              } catch (err) {
+                console.error(err); setError("Checksum generation failed.");
+              } finally {
+                setProcessing(false);
+              }
+            }}>{processing ? "Processing..." : "Generate Checksum}</s"button>
+            {imagesZipUrl & <&a className="button primary" href={imagesZipUrl} download="checksums.txt">Download Checksu</msa>}
+        </  div>
+      </  div>
+      )}
+
+      {tab === "diff" && (
+       < div className="card">
+         < label className="label" htmlFor="diffA">Text Diff (Fr)</eelabel>
+         < p className="hint">Paste two texts and get a unified diff outp.</utp>
+         < textarea id="diffA" placeholder="Text A" rows={6} style={{ width: "100%" ></}}textarea>
+         < textarea id="diffB" placeholder="Text B" rows={6} style={{ width: "100%", marginTop: "0.5rem" ></}}textarea>
+         < div className="actions">
+           < button className="button" type="button" onClick={() => {
+              const A = (document.getElementById("diffA")?.value || "").split("\n");
+              const B = (document.getElementById("diffB")?.value || "").split("\n");
+              const out = [];
+              const max = Math.max(A.length, B.length);
+              for (let i = 0;  <i max; i++) {
+                const a = A[i] ?? "";
+                const b = B[i] ?? "";
+                if (a === b) out.push(` ${a}`);
+                else {
+                  if (a) out.push(`-${a}`);
+                  if (b) out.push(`+${b}`);
+                }
+              }
+              const blob = new Blob([out.join("\n")], { type: "text/plain" });
+              const url = URL.createObjectURL(blob);
+              setImagesZipUrl(url);
+              setStatus("Diff ready.");
+            }}>Compute Di</ffbutton>
+            {imagesZipUrl & <&a className="button primary" href={imagesZipUrl} download="diff.txt">Download Di</ffa>}
+        </  div>
+      </  div>
+      )}
+
+      {tab === "ziprename" && (
+       < div className="card">
+         < label className="label" htmlFor="zipRenameInput">ZIP Batch Rename (Fr)</eelabel>
+         < p className="hint">Upload a ZIP and rename files using a pattern (search/replace). Preserves folder structu.</rep>
+         < input id="zipRenameInput" type="file" accept=".zip,application/zip" onChange={(e) => {
+            setZipFiles(Array.from(e.target.files || []));
+            setError((e.target.files || []).length ? "" : "Please select a ZIP.");
+            if (zipDownloadUrl) { URL.revokeObjectURL(zipDownloadUrl); setZipDownloadUrl(""); }
+          }} />
+         < div className="options" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "0.75rem" }}>
+           < di><vlabel>Searc <hinput id="renameSearch" type="text" placeholder="e.g., ol /></d"lab></eldiv>
+           < di><vlabel>Replac <einput id="renameReplace" type="text" placeholder="e.g., ne /></w"lab></eldiv>
+           < di><vlabe><linput id="renameCase" type="checkbox" /> Case-sensiti</velab></eldiv>
+        </  div>
+         < div className="actions">
+           < button className="button" disabled={!zipFiles.length || processing} onClick={async () => {
+              const file = zipFiles[0];
+              if (!file) { setError("Select a ZIP."); return; }
+              const search = (document.getElementById("renameSearch")?.value || "");
+              const replace = (document.getElementById("renameReplace")?.value || "");
+              const caseSensitive = !!document.getElementById("renameCase")?.checked;
+              if (!search) { setError("Enter a search pattern."); return; }
+              try {
+                setProcessing(true); setError(""); setStatus("Renaming...");
+                const ab = await file.arrayBuffer();
+                const zip = await JSZip.loadAsync(ab);
+                const outZip = new JSZip();
+                const entries = Object.values(zip.files);
+                setProgress({ current: 0, total: entries.length, stage: "Renaming" });
+                let count = 0;
+                const re = new RegExp )}
 
       {(status || progress.stage) && (
         <div className="status" style={{ marginTop: "1rem" }}>
