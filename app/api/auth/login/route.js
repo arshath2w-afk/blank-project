@@ -1,9 +1,15 @@
 import crypto from "crypto";
+import { getDb } from "../../../lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function getUser(email) {
+  const db = await getDb();
+  if (db) {
+    const col = db.collection("users");
+    return await col.findOne({ email });
+  }
   if (process.env.LICENSE_STORE === "kv" && process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(`user:${email}`)}`;
     const res = await fetch(url, {

@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { getDb } from "../../../lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,20 @@ function endOfCurrentMonth() {
 }
 
 async function putLicense(key, value) {
+  const db = await getDb();
+  if (db) {
+    const col = db.collection("licenses");
+    // Upsert by licenseKey, also store email/passthrough references
+    await col.updateOne({ licenseKey: value.licenseKey }, { $set: value }, { upsert: true });
+    if (value.email) {
+      await col.updateOne({ email: value.email }, { $set: value }, { upsert: true });
+    }
+    if (value.passthrough) {
+      await col.updateOne({ passthrough: value.passthrough }, { $set: value }, { upsert: true });
+    }
+    return true;
+  }
+
   if (process.env.LICENSE_STORE === "kv" && process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     const url = `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`;
     const res = await fetch(url, {
@@ -68,9 +83,8 @@ export async function POST(req) {
       expiresAt: exp,
     };
 
-    // Use passthrough if given, else email, else licenseKey as store key
-    const id = passthrough || email || licenseKey;
-    await putLicense(id, record);
+    // Store under multiple keys for easier verification
+    await putLicense(licenseKey, record);
 
     return new Response(JSON.stringify({ ok: true, licenseKey, expiresAt: exp }), { status: 200 });
   } catch (err) {
